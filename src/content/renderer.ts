@@ -59,7 +59,7 @@ function markNewWords(
     new RegExp(`\\b(${wordPattern})\\b`, "gi"),
     (match) => {
       const def = wordMap.get(match.toLowerCase()) ?? "";
-      return `<span class="enlearn-word" data-def="${escapeHtml(def)}">${match}</span>`;
+      return `<span class="enlearn-word" data-def="${escapeHtml(def)}" data-word="${match.toLowerCase()}">${match}</span>`;
     }
   );
 }

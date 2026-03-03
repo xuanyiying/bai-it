@@ -77,28 +77,119 @@ function shouldSkipWord(word: string): boolean {
   return false;
 }
 
-/** 检查是否为常用词 */
-export function isCommonWord(word: string): boolean {
-  if (!frequencySet) return false;
-  return frequencySet.has(word.toLowerCase());
+/**
+ * 简单词形还原：去掉常见英文后缀，尝试还原词典原形
+ * 不求完美，只求覆盖最常见的变形（-s, -es, -ed, -ing, -ly, -er, -est）
+ */
+export function getStemCandidates(word: string): string[] {
+  const w = word.toLowerCase();
+  const candidates: string[] = [w];
+
+  // -ing: running→run, making→make, achieving→achieve
+  if (w.endsWith("ing") && w.length > 5) {
+    const stem = w.slice(0, -3);
+    candidates.push(stem);           // running → runn → 不行，但 look below
+    candidates.push(stem + "e");     // making → make
+    // 双写辅音: running → run
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      candidates.push(stem.slice(0, -1));
+    }
+  }
+
+  // -ed: achieved→achieve, transformed→transform, stopped→stop
+  if (w.endsWith("ed") && w.length > 4) {
+    candidates.push(w.slice(0, -2));   // transformed → transform
+    candidates.push(w.slice(0, -1));   // achieved → achiev → 不行
+    // 双写辅音: stopped → stop
+    const stem = w.slice(0, -2);
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      candidates.push(stem.slice(0, -1));
+    }
+    // -ied: satisfied → satisfy
+    if (w.endsWith("ied")) {
+      candidates.push(w.slice(0, -3) + "y");
+    }
+  }
+
+  // -s/-es: transformers→transformer, achieves→achieve
+  if (w.endsWith("ses") || w.endsWith("xes") || w.endsWith("zes") ||
+      w.endsWith("ches") || w.endsWith("shes")) {
+    candidates.push(w.slice(0, -2)); // watches → watch
+  } else if (w.endsWith("ies") && w.length > 4) {
+    candidates.push(w.slice(0, -3) + "y"); // strategies → strategy
+  } else if (w.endsWith("s") && !w.endsWith("ss") && w.length > 3) {
+    candidates.push(w.slice(0, -1)); // transformers → transformer
+  }
+
+  // -ly: dramatically→dramatic, elegantly→elegant
+  if (w.endsWith("ly") && w.length > 4) {
+    candidates.push(w.slice(0, -2));  // elegantly → elegant
+    // -ally: dramatically → dramatic
+    if (w.endsWith("ally") && w.length > 6) {
+      candidates.push(w.slice(0, -4)); // dramatically → dramatic → 不行
+      candidates.push(w.slice(0, -4) + "al"); // optionally → optional
+    }
+    // -ily: easily → easy
+    if (w.endsWith("ily")) {
+      candidates.push(w.slice(0, -3) + "y");
+    }
+  }
+
+  // -er/-est: faster→fast, biggest→big
+  if (w.endsWith("er") && w.length > 4 && !w.endsWith("eer") && !w.endsWith("ier")) {
+    candidates.push(w.slice(0, -2));
+    candidates.push(w.slice(0, -1)); // bigger → bigge → 不行, but try
+    const stem = w.slice(0, -2);
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      candidates.push(stem.slice(0, -1)); // bigger → big
+    }
+  }
+  if (w.endsWith("est") && w.length > 5) {
+    candidates.push(w.slice(0, -3));
+    const stem = w.slice(0, -3);
+    if (stem.length >= 3 && stem[stem.length - 1] === stem[stem.length - 2]) {
+      candidates.push(stem.slice(0, -1));
+    }
+  }
+
+  // -tion/-sion: implementation→implement (bonus, not critical)
+  if (w.endsWith("tion") && w.length > 6) {
+    candidates.push(w.slice(0, -4));     // tion removed
+    candidates.push(w.slice(0, -5) + "t"); // -ation → -at → 不行, 但 -ation 可能有
+  }
+
+  // 去重
+  return [...new Set(candidates)];
 }
 
-/** 在行业术语包中查找 */
+/** 检查是否为常用词（含词形变体） */
+export function isCommonWord(word: string): boolean {
+  if (!frequencySet) return false;
+  const candidates = getStemCandidates(word);
+  return candidates.some(c => frequencySet!.has(c));
+}
+
+/** 在行业术语包中查找（含词形变体） */
 function lookupIndustry(word: string, packs: string[]): string | null {
-  const lower = word.toLowerCase();
+  const candidates = getStemCandidates(word);
   for (const pack of packs) {
     const map = industryMaps.get(pack);
-    if (map?.has(lower)) {
-      return map.get(lower)!;
+    if (!map) continue;
+    for (const c of candidates) {
+      if (map.has(c)) return map.get(c)!;
     }
   }
   return null;
 }
 
-/** 在通用词典中查找 */
+/** 在通用词典中查找（含词形变体） */
 function lookupDictionary(word: string): string | null {
   if (!dictMap) return null;
-  return dictMap.get(word.toLowerCase()) ?? null;
+  const candidates = getStemCandidates(word);
+  for (const c of candidates) {
+    if (dictMap.has(c)) return dictMap.get(c)!;
+  }
+  return null;
 }
 
 /**
