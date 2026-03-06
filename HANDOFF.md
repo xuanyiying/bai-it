@@ -4,26 +4,25 @@
 
 ## 当前状态
 
-**插件修复完成，发布准备中。** 198 个单元测试全通过，构建正常。
+**词典扩容完成。** 198 个单元测试全通过，构建正常。
 
-### 本次完成（0305 插件修复：Twitter Show more + DOM 策略 + 词典合并）
+### 本次完成（0307 词典大幅扩容：6K→31K 词条）
 
-**三块修复一起提交：**
+**问题**：原词典 6125 词条由 AI 手动编写（26 个 batch 文件），覆盖率差。crappy、bolted、suspicion、compaction 等中等难度词全部漏标。
 
-1. **Twitter "Show more" 修复** — 跳过含 "Show more" 按钮的推文，保留按钮让用户自己点
-   - **根因**：Twitter React 通过 `scrollHeight > clientHeight` 重测量决定是否渲染 "Show more"，隐藏 tweetText 导致 React 认为无溢出，通过 reconciliation 删除按钮
-   - **方案**：`scanPage` 中检测到 `[data-testid="tweet-text-show-more-link"]` → `continue` 跳过
-   - 用户手动点击 "Show more" → React 加载全文 → MutationObserver 检测到变化 → `scanPage` 处理全文
-2. **DOM 插入策略增强**
-   - 父容器防卫：`el.querySelector(DOM_SELECTORS)` 跳过包含更具体匹配的父容器
-   - 隐藏后代防卫：`el.closest(".enlearn-original-hidden")` 跳过已隐藏元素内的后代
-   - `.enlearn-clamp-override` CSS 不再强制 `display: block !important`（避免破坏 flex 布局）
-   - MutationObserver 增强：场景 A（原地内容更新）+ 场景 B（React 元素替换 + 孤儿清理）
-   - `restoreSingleElement()` 新增：单元素恢复函数
-3. **词典合并：删除 industry pack 系统**（同上次 session，之前未提交）
-   - AI 义项合并进 `dict-ecdict.json`，删除 `data/industry-ai.json`
-   - 移除 `loadIndustryPack`、`lookupIndustry`、`industryMaps`
-   - 清理全链路：types.ts、background、useConfig、DailyReview、测试
+**方案**：基于 ECDICT 开源词典（77 万词条，MIT 协议）重建全部词汇数据。
+
+1. **数据重建**
+   - `word-frequency.json`：5566→5806 常用词（BNC/FRQ ≤ 5000 + 基础功能词）
+   - `dict-ecdict.json`：6125→31741 词条（BNC/FRQ 5001-30000 + 有考试标签的词）
+   - `lemma-map.json`（新）：28751 条词形变体→原形映射（ECDICT exchange 字段）
+   - `modern-vocab.json`（新）：122 条 AI/俚语/缩写（prod、repo、vibe、FOMO 等），合并进词典
+2. **基础词排除**：~240 个最基础的功能词（is/are/do/go/man/good 等）及其变形，从词典中彻底移除
+3. **缩写跳过**：含撇号的词（don't/won't/can't）在 `shouldSkipWord` 中一律跳过
+4. **vocab.ts 重构**：新增 `loadLemmaMap()`，`getStemCandidates()` 优先查 lemma 映射表、兜底用后缀规则
+5. **构建工具**：`scripts/build-dict-from-ecdict.mjs` 从 ECDICT CSV 一键构建所有数据
+
+**体积影响**：content.js 从 ~350KB 增到 3.2MB（词典+lemma 数据），Chrome 扩展本地缓存可接受。
 
 ### 上次完成（0304 设置页精简 + API 调试）
 
@@ -93,11 +92,12 @@
 
 ## 关键决策记录
 
-### 词典统一（0304 新，替代三层词汇源）
-- **删除 industry pack 系统**，AI 义项合并进 dict-ecdict.json
-- 词典是唯一的标注源（不在词典中 → 不标注）
-- AI 义项格式：`原义 | [AI] AI释义`，纯 AI 词条：`[AI] 释义`
-- 产品名（ChatGPT、Claude 等）不入词典 → 不会被标注
+### 词典架构（0307 重建，基于 ECDICT）
+- **数据源**：ECDICT 77 万词条 → 按 BNC/FRQ 筛选 + modern-vocab 补充
+- **三文件架构**：word-frequency.json（常用词，不标注）+ dict-ecdict.json（词典，标注）+ lemma-map.json（词形映射）
+- **构建工具**：`scripts/build-dict-from-ecdict.mjs`，需要 `/tmp/ecdict.csv`（从 ECDICT GitHub 下载）
+- **基础词排除**：~240 个功能词及变形永不进词典
+- 现代词汇（AI/俚语/缩写）维护在 `data/modern-vocab.json`，构建时合并
 
 ### 三层体验模型（0303，替代原两层产品模型）
 - **第一层**：装完即用 — 所有英文网页自动扫读，本地拆分 + 标生词，零配置
@@ -161,17 +161,20 @@
 - [x] **设置页精简 + 模型更新 + 端到端测试连接**（Gemini 3.1 / DeepSeek 已验证跑通）
 - [x] **词典合并：删除 industry pack 系统**（AI 义项合并进通用词典，198 测试通过）
 - [x] **插件修复：Twitter Show more + DOM 策略增强 + MutationObserver**
+- [x] **词典大幅扩容：6K→31K 词条**（ECDICT 重建 + lemma 映射 + 现代词汇 + 基础词排除）
 
 ## 编码细节
 
 ### 构建配置
 - **ESM** 仅用于 background service worker（MV3 要求 `type: module`）
 - **IIFE** 用于 content script、popup、options（Chrome 不支持 content script ESM）
-- content.js 包含词汇数据打包后约 350KB（含合并后的词典），可接受
+- content.js 包含词汇数据打包后约 3.2MB（词典 31K + lemma 28K），Chrome 扩展本地缓存可接受
 
 ### 数据文件（data/）
-- `word-frequency.json`：5000 常用词（来源：Google Trillion Word Corpus top 5000）
-- `dict-ecdict.json`：6125 个词条（通用释义 + AI 等行业义项合并），格式 `原义 | [AI] AI释义`
+- `word-frequency.json`：5806 常用词（ECDICT BNC/FRQ ≤ 5000 + 基础功能词），不标注
+- `dict-ecdict.json`：31741 词条（ECDICT 筛选 + modern-vocab 合并），用于标注
+- `lemma-map.json`：28751 条词形变体→原形映射，运行时词形还原
+- `modern-vocab.json`：122 条现代词汇（AI/俚语/缩写），构建时合并进词典
 
 ### IndexedDB 数据层
 - **数据库**：`openen-data`（与缓存数据库 `openen-cache` 独立）— 名称保持不改，避免丢失用户数据
