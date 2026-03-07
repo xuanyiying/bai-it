@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node build.mjs --watch",
     "build": "node build.mjs",
+    "release": "npm test && npm run build && VERSION=$(node -p \"require('./manifest.json').version\") && cd dist && zip -r \"../bai-it-v${VERSION}.zip\" . && echo \"Packaged: bai-it-v${VERSION}.zip\"",
     "test": "vitest run"
   },
   "devDependencies": {

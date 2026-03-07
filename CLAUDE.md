@@ -1,31 +1,73 @@
-# 掰it — Claude 工作手册
-
-> **新 session 第一件事：先看 [HANDOFF.md](./HANDOFF.md) 了解当前状态。**
+# 掰it — 项目指南
 
 ## 项目简介
 
-掰it 是一个纯本地的 Chrome 扩展，帮助用户在浏览英文网页时进行句子分块（chunking）和词汇学习。用户装完插件、填一个 LLM API key，就能用。零后端、零登录。
+掰it 是一个纯本地 Chrome 扩展，帮助用户在浏览英文网页时拆解长句结构、标注生词。零后端、零登录。
 
-## 开发流程
+详见 [README.md](./README.md)。
 
-遵循全局 CLAUDE.md 中的「标准开发流程」（6 步：需求对齐 → UI/交互设计 → 验收标准 → 技术方案 → 编码 → 验收确认）。
+## 开发
 
-以下是本项目的补充规矩：
+```bash
+npm install        # 安装依赖
+npm run build      # 构建到 dist/
+npm test           # 运行单元测试（Vitest）
+npm run release    # 发布：跑测试 + 构建 + 打包 bai-it.zip
+```
 
-- **密钥安全**：代码和文档中不出现任何明文 key，密钥只存环境变量或用户本地配置
-- **任务追踪**：用 GitHub Issues，不设单独的 workstreams 文件
-- **并行开发**：按文件拆分 worktree，不按功能拆（避免多 worktree 改同一文件导致冲突）
-- **测试纪律**：浏览器验收通过 Puppeteer 自动执行，不依赖用户手动操作
+构建产物在 `dist/` 目录，加载到 Chrome 的开发者模式即可测试。
 
-## 文档结构
+## 发布
 
-| 文档 | 性质 | 作用 | 更新时机 |
-|------|------|------|----------|
-| **CLAUDE.md**（本文件） | 稳定 | 项目索引、项目特定规矩 | 规矩变化时 |
-| **[HANDOFF.md](./HANDOFF.md)** | 易变 | 当前做到哪了、上次改了什么、下一步是什么 | 每个 session 结束时 |
-| **[README.md](./README.md)** | 稳定 | 给用户看的安装、配置、使用说明 | 功能上线时 |
-| **[docs/prd.md](./docs/prd.md)** | 较稳定 | 产品：用户痛点、设计原则、功能范围 | 产品方向变化时 |
-| **[docs/design.md](./docs/design.md)** | 较稳定 | 设计：整体视觉风格、各模块 UI/交互设计 | 设计变化时 |
-| **[docs/architecture.md](./docs/architecture.md)** | 较稳定 | 技术：架构、数据模型、模块设计、关键决策 | 技术方案变化时 |
-| **[docs/testing.md](./docs/testing.md)** | 随开发演进 | 测试：验收标准、测试方法、测试基础设施 | 每个开发步骤开始前补充验收标准 |
-| **[docs/publishing.md](./docs/publishing.md)** | 随发布推进 | 发布：Chrome Web Store 上架 + 开源发布的清单和进度 | 完成一项勾一项 |
+用户说"发布"时，执行完整发布流程：更新版本号 → `npm run release` → git push → 上传 Chrome + Edge。
+
+详见 [docs/release.md](./docs/release.md)
+
+## 项目结构
+
+```
+src/
+├── background/    # Service Worker（MV3）
+├── content/       # Content Script（网页注入）
+├── popup/         # 插件弹窗
+├── options/       # 管理页面（React）
+│   ├── components/
+│   ├── hooks/
+│   └── tabs/
+└── shared/        # 共享模块（DB、LLM、词汇、规则引擎）
+data/              # 词频表 + 离线词典
+tests/             # 单元测试 + 浏览器验收测试
+docs/              # 产品需求 / 设计规范 / 技术架构
+_local/            # 内部文件（.gitignore 排除，不进 git）
+```
+
+## 构建配置
+
+- **ESM** 仅用于 background service worker（MV3 要求 `type: module`）
+- **IIFE** 用于 content script、popup、options（Chrome 不支持 content script ESM）
+
+## 数据存储
+
+- **IndexedDB**（`openen-data`）：学习记录、生词、待分析句子等
+- **chrome.storage.sync**：LLM 配置、站点开关等用户偏好
+- **chrome.storage.local**：已掌握词列表
+
+## 文档
+
+| 文档 | 内容 |
+|------|------|
+| [docs/prd.md](./docs/prd.md) | 产品需求：用户痛点、三层体验模型、功能范围 |
+| [docs/design.md](./docs/design.md) | 设计规范：视觉风格、品牌、各模块 UI |
+| [docs/architecture.md](./docs/architecture.md) | 技术架构：模块设计、数据模型、关键决策 |
+| [docs/testing.md](./docs/testing.md) | 测试：验收标准、测试方法 |
+| [docs/release.md](./docs/release.md) | 发布流程：版本号 → 打包 → 推送 → 上架 Chrome + Edge |
+| [docs/workflow.md](./docs/workflow.md) | 文件组织 + Git 工作流 + 日常操作指引 |
+
+### 内部文档（`_local/`，不进 git）
+
+| 文档 | 内容 |
+|------|------|
+| [_local/HANDOFF.md](./_local/HANDOFF.md) | 交接状态：当前进度、上次改了什么、下一步 |
+| `_local/playgrounds/` | 设计原型 HTML |
+| `_local/mockups/` | UI Mockup HTML |
+| `_local/store-assets/` | 商店提交文档 + 截图 |

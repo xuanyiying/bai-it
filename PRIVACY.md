@@ -24,7 +24,7 @@ This extension does not use analytics, tracking, advertising, or any third-party
 
 ## Open Source
 
-This extension is open source under the MIT License. You can inspect the full source code at: https://github.com/liuyujian/openen
+This extension is open source under the MIT License. You can inspect the full source code at: https://github.com/CapeAga/bai-it
 
 ## Contact
 

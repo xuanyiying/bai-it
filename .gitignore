@@ -1,7 +1,43 @@
+# Dependencies & build
 node_modules/
 dist/
+
+# Environment variables
 .env
 .env.local
+
+# Chrome extension packaging
 *.crx
 *.pem
+
+# OS
 .DS_Store
+
+# === Internal files ===
+_local/
+
+# Build artifacts
+bai-it-v*.zip
+
+# Unrelated project
+frontend-slides-main/
+
+# Test output screenshots
+tests/screenshots/
+
+# One-off debug test scripts
+tests/acceptance/twitter-*.mjs
+tests/acceptance/twitter-*.py
+tests/acceptance/reddit-*.mjs
+tests/acceptance/showmore-*.mjs
+tests/fixtures/twitter-*.html
+tests/fixtures/reddit-*.html
+
+# Dictionary batch source files (final dict is in data/)
+scripts/dict-batch*.js
+
+# Claude memory (per-machine)
+.claude/
+
+# Edge store logo
+icons/edge-logo-300.png

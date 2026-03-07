@@ -209,7 +209,7 @@ python3 tests/acceptance/deep-read.py   # 细读模式验收
 |--------|------|----------|
 | 关键 token 自动检查 | Puppeteer 样式断言 | 页面底色 `#09090b`、4 种字体已加载（Syne / Space Grotesk / ZCOOL KuaiLe / Nunito）、CTA 按钮红色 `#ef4444`、统计数字 42px Syne 800 |
 | 4个 Tab 截图 | Puppeteer 自动截图 | 自动打开每个 Tab 截图保存到 `tests/screenshots/`，作为回归基准 |
-| 视觉还原对比 | Claude for Chrome | 将 Options 页截图与 `playground-pages.html` 对应 Tab 截图对比，确认配色/字体/布局/组件还原度 |
+| 视觉还原对比 | Claude for Chrome | 将 Options 页截图与 `_local/playgrounds/playground-pages.html` 对应 Tab 截图对比，确认配色/字体/布局/组件还原度 |
 | 动效体感 | 人工确认 | 入场动画、Tab 切换、按钮 hover 流畅自然 |
 
 ### 管理端引导系统（v2）
