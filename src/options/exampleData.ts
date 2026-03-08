@@ -151,6 +151,7 @@ export const EXAMPLE_DASHBOARD: DashboardData = {
   totalSentences: 23,
   totalWords: 47,
   masteredWords: 12,
+  todayCount: 8,
   recentSentences: exampleSentences.slice(0, 3),
   loading: false,
 };

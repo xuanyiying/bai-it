@@ -70,6 +70,7 @@ _local/            # 内部文件（.gitignore 排除，不进 git）
 | 文档 | 内容 |
 |------|------|
 | [_local/HANDOFF.md](./_local/HANDOFF.md) | 交接状态：当前进度、上次改了什么、下一步 |
+| [_local/backlog.md](./_local/backlog.md) | 需求池：想法收集、优先级管理（`/bai-idea` 快速记录） |
 | `_local/playgrounds/` | 设计原型 HTML |
 | `_local/mockups/` | UI Mockup HTML |
 | `_local/store-assets/` | 商店提交文档 + 截图 |

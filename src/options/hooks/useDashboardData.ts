@@ -7,6 +7,7 @@ export interface DashboardData {
   totalSentences: number;
   totalWords: number;
   masteredWords: number;
+  todayCount: number;
   recentSentences: LearningRecord[];
   recentPending: PendingSentenceRecord[];
   pendingCount: number;
@@ -18,6 +19,7 @@ export function useDashboardData(db: IDBDatabase | null, isExample?: boolean): D
     totalSentences: 0,
     totalWords: 0,
     masteredWords: 0,
+    todayCount: 0,
     recentSentences: [],
     recentPending: [],
     pendingCount: 0,
@@ -42,6 +44,11 @@ export function useDashboardData(db: IDBDatabase | null, isExample?: boolean): D
       const mastered = allVocab.filter((v) => v.status === "mastered");
       const unanalyzedCount = pending.filter(p => !p.analyzed).length;
 
+      // Today's activity: sentences encountered today
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayCount = pending.filter(p => p.created_at >= todayStart.getTime()).length;
+
       // Sort by created_at descending, take 3 most recent
       const sorted = [...records].sort((a, b) => b.created_at - a.created_at);
       const recent = sorted.slice(0, 3);
@@ -56,6 +63,7 @@ export function useDashboardData(db: IDBDatabase | null, isExample?: boolean): D
         totalSentences: records.length + unanalyzedCount,
         totalWords: allVocab.length,
         masteredWords: mastered.length,
+        todayCount,
         recentSentences: recent,
         recentPending: recentPend,
         pendingCount: unanalyzedCount,

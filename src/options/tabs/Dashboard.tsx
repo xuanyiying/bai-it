@@ -36,7 +36,7 @@ function extractDomain(url?: string): string {
 }
 
 export function Dashboard({ db, isExample, pendingCount, hasApi, onGoToReview, onGoToSettings }: DashboardProps) {
-  const { totalSentences, totalWords, masteredWords, recentSentences, recentPending, loading } = useDashboardData(db, isExample);
+  const { totalSentences, totalWords, masteredWords, todayCount, recentSentences, recentPending, loading } = useDashboardData(db, isExample);
 
   if (loading) return null;
 
@@ -44,6 +44,10 @@ export function Dashboard({ db, isExample, pendingCount, hasApi, onGoToReview, o
     <>
       {/* Stats row */}
       <div className="stats-row rv">
+        <GlassCard className="stat-card">
+          <div className="stat-num">{todayCount}</div>
+          <div className="stat-label">今日掰句</div>
+        </GlassCard>
         <GlassCard className="stat-card">
           <div className="stat-num">{totalSentences}</div>
           <div className="stat-label">难句</div>
@@ -61,7 +65,7 @@ export function Dashboard({ db, isExample, pendingCount, hasApi, onGoToReview, o
       {/* Recent sentences — analyzed or pending fallback */}
       {recentSentences.length > 0 ? (
         <>
-          <div className="section-head rv">掰过的句子</div>
+          <div className="section-head rv">难句精析</div>
           {recentSentences.map((record) => (
             <GlassCard key={record.id} className="sentence-card rv">
               <div className="sentence-meta">
