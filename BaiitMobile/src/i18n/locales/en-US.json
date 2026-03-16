@@ -1,0 +1,116 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "save": "Save",
+    "clear": "Clear",
+    "search": "Search",
+    "noData": "No data",
+    "success": "Success",
+    "error": "Error"
+  },
+  "tabs": {
+    "home": "Scan",
+    "vocab": "Vocabulary",
+    "sentences": "Sentences",
+    "stats": "Statistics"
+  },
+  "home": {
+    "title": "Bai-it Smart Reading Assistant",
+    "subtitle": "Automatically identify new words to assist English reading",
+    "todayNewWords": "Today's New Words",
+    "collectedSentences": "Collected Sentences",
+    "scanRecords": "Scan Records",
+    "browser": "Built-in Browser",
+    "browserHint": "Browse web pages in the app, auto-process English content",
+    "clipboardMonitor": "Clipboard Monitor",
+    "clipboardEnabled": "Enabled, auto-process when copying English text",
+    "clipboardDisabled": "Enable to auto-identify new words when copying English text",
+    "clipboardHint": "Enable clipboard monitor, or read English pages in the browser",
+    "processing": "Processing...",
+    "manageWhitelist": "Manage App Whitelist",
+    "enabledApps": "{{count}} apps enabled",
+    "noRecords": "No scan records"
+  },
+  "browser": {
+    "title": "Browser",
+    "quickAccess": "Quick Access",
+    "enterUrl": "Enter URL or search",
+    "processing": "Processing page content...",
+    "processed": "Processed {{count}} sentences"
+  },
+  "vocab": {
+    "title": "Vocabulary",
+    "total": "{{count}} words total",
+    "all": "All",
+    "new": "New",
+    "learning": "Learning",
+    "mastered": "Mastered",
+    "searchPlaceholder": "Search words or definitions...",
+    "encounterCount": "Encountered {{count}} times",
+    "noWords": "No words yet",
+    "noMatch": "No matching words found",
+    "confirmDelete": "Delete word \"{{word}}\"?"
+  },
+  "sentences": {
+    "title": "Sentences",
+    "total": "{{count}} sentences total",
+    "searchPlaceholder": "Search sentences...",
+    "detail": "Sentence Details",
+    "original": "Original",
+    "translation": "Translation",
+    "chunks": "Chunking",
+    "analysis": "Sentence Analysis",
+    "tips": "Expression Tips",
+    "newWords": "New Words",
+    "source": "Source",
+    "noSentences": "No collected sentences",
+    "noMatch": "No matching sentences found",
+    "confirmDelete": "Delete this sentence?"
+  },
+  "stats": {
+    "title": "Statistics",
+    "subtitle": "Track your progress",
+    "streak": "Streak",
+    "days": "days",
+    "longestRecord": "Longest: {{count}} days",
+    "todayOverview": "Today's Overview",
+    "newWords": "New Words",
+    "reviewedWords": "Reviewed Words",
+    "collectedSentences": "Collected Sentences",
+    "studyTime": "Study Time",
+    "minutes": "min",
+    "vocabMastery": "Vocabulary Mastery",
+    "totalVocab": "Total",
+    "newVocab": "New",
+    "learningVocab": "Learning",
+    "masteredVocab": "Mastered",
+    "progress": "Progress",
+    "sentenceCollection": "Sentence Collection",
+    "collected": "Collected Sentences",
+    "reviewReminder": "Review Reminder",
+    "todayReview": "Today's Review",
+    "reviewCount": "{{count}} words need review",
+    "startReview": "Start Review",
+    "weeklyTrend": "7-Day Trend"
+  },
+  "settings": {
+    "title": "Settings",
+    "language": "Language",
+    "theme": "Theme",
+    "selectLanguage": "Select Language",
+    "selectTheme": "Select Theme"
+  },
+  "languages": {
+    "zh": "中文",
+    "en": "English",
+    "ja": "日本語"
+  },
+  "themes": {
+    "light": "Light",
+    "dark": "Dark",
+    "ocean": "Ocean"
+  }
+}

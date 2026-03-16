@@ -1,0 +1,116 @@
+{
+  "common": {
+    "loading": "加载中...",
+    "confirm": "确认",
+    "cancel": "取消",
+    "delete": "删除",
+    "save": "保存",
+    "clear": "清空",
+    "search": "搜索",
+    "noData": "暂无数据",
+    "success": "成功",
+    "error": "错误"
+  },
+  "tabs": {
+    "home": "扫描",
+    "vocab": "生词本",
+    "sentences": "句子",
+    "stats": "统计"
+  },
+  "home": {
+    "title": "Bai-it 智能阅读助手",
+    "subtitle": "自动识别生词，辅助英文阅读",
+    "todayNewWords": "今日新词",
+    "collectedSentences": "收藏句子",
+    "scanRecords": "识别记录",
+    "browser": "内置浏览器",
+    "browserHint": "在 App 内浏览网页，自动处理英文内容",
+    "clipboardMonitor": "剪贴板监听",
+    "clipboardEnabled": "已开启，复制英文文本时自动处理",
+    "clipboardDisabled": "开启后，复制英文文本时自动识别生词",
+    "clipboardHint": "开启剪贴板监听，或在浏览器中阅读英文网页",
+    "processing": "处理中...",
+    "manageWhitelist": "管理应用白名单",
+    "enabledApps": "已启用 {{count}} 个应用",
+    "noRecords": "暂无识别记录"
+  },
+  "browser": {
+    "title": "浏览器",
+    "quickAccess": "快速访问",
+    "enterUrl": "输入网址或搜索",
+    "processing": "正在处理页面内容...",
+    "processed": "已处理 {{count}} 个句子"
+  },
+  "vocab": {
+    "title": "生词本",
+    "total": "共 {{count}} 个单词",
+    "all": "全部",
+    "new": "新词",
+    "learning": "学习中",
+    "mastered": "已掌握",
+    "searchPlaceholder": "搜索单词或释义...",
+    "encounterCount": "遇到 {{count}} 次",
+    "noWords": "暂无单词",
+    "noMatch": "没有找到匹配的单词",
+    "confirmDelete": "确定要删除单词 \"{{word}}\" 吗？"
+  },
+  "sentences": {
+    "title": "句子收藏",
+    "total": "共 {{count}} 个句子",
+    "searchPlaceholder": "搜索句子...",
+    "detail": "句子详情",
+    "original": "原文",
+    "translation": "翻译",
+    "chunks": "意群划分",
+    "analysis": "句子分析",
+    "tips": "表达提示",
+    "newWords": "生词",
+    "source": "来源",
+    "noSentences": "暂无收藏的句子",
+    "noMatch": "没有找到匹配的句子",
+    "confirmDelete": "确定要删除这个句子吗？"
+  },
+  "stats": {
+    "title": "学习统计",
+    "subtitle": "记录你的每一步成长",
+    "streak": "连续学习",
+    "days": "天",
+    "longestRecord": "最长记录: {{count}} 天",
+    "todayOverview": "今日概览",
+    "newWords": "新学单词",
+    "reviewedWords": "复习单词",
+    "collectedSentences": "收藏句子",
+    "studyTime": "学习时长",
+    "minutes": "分钟",
+    "vocabMastery": "词汇掌握",
+    "totalVocab": "总词汇",
+    "newVocab": "新词",
+    "learningVocab": "学习中",
+    "masteredVocab": "已掌握",
+    "progress": "掌握进度",
+    "sentenceCollection": "句子收藏",
+    "collected": "已收藏句子",
+    "reviewReminder": "复习提醒",
+    "todayReview": "今日待复习",
+    "reviewCount": "有 {{count}} 个单词需要复习",
+    "startReview": "开始复习",
+    "weeklyTrend": "近7天学习趋势"
+  },
+  "settings": {
+    "title": "设置",
+    "language": "语言",
+    "theme": "主题",
+    "selectLanguage": "选择语言",
+    "selectTheme": "选择主题"
+  },
+  "languages": {
+    "zh": "中文",
+    "en": "English",
+    "ja": "日本語"
+  },
+  "themes": {
+    "light": "明亮",
+    "dark": "深邃",
+    "ocean": "海洋"
+  }
+}
