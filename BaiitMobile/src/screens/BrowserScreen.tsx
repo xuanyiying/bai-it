@@ -7,27 +7,28 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Keyboard,
-    Modal,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { WebView, WebViewNavigation } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as WebBrowser from 'expo-web-browser';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, {
     FadeIn,
     FadeOut,
-    SlideInUp,
-    SlideOutDown,
 } from 'react-native-reanimated';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { Dictionary } from '../services/dictionary';
 import { Database, VocabRecord } from '../services/database';
 import { storage } from '../services/storage';
-import { WordInfo } from '../types';
+import { ProficiencyTest } from '../services/proficiency-test';
+import { PersonalizedAnnotationService } from '../services/personalized-annotation';
 import { isEnglish, splitSentences, estimateComplexity } from '../utils/rule-engine';
 import { RootStackParamList } from '../../App';
+import { WordDetailCard } from '../components/WordDetailCard';
 
 type BrowserScreenProps = {
     navigation: NativeStackNavigationProp<RootStackParamList, 'Browser'>;
@@ -508,58 +509,113 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
         }
     };
 
-    const processPageContent = useCallback(async (text: string) => {
+    // 已处理的单词集合，避免重复处理
+    const processedWordsRef = useRef<Set<string>>(new Set());
+
+    const processPageContent = useCallback(async (text: string, pageTitle?: string, isScroll = false) => {
         if (isProcessing || !isEnglish(text)) return;
+
+        // 滚动时检查是否有新内容需要处理
+        if (isScroll) {
+            // 提取文本中的单词
+            const words = text.match(/\b[a-zA-Z]+\b/g) || [];
+            const uniqueWords = new Set(words.map(w => w.toLowerCase()));
+
+            // 检查是否有未处理的新单词
+            let hasNewWords = false;
+            for (const word of uniqueWords) {
+                if (!processedWordsRef.current.has(word) && word.length > 3) {
+                    hasNewWords = true;
+                    break;
+                }
+            }
+
+            // 如果没有新单词，跳过处理
+            if (!hasNewWords) return;
+        }
 
         setIsProcessing(true);
         try {
-            const sentences = splitSentences(text);
-            const complexSentences = sentences.filter(s => estimateComplexity(s) >= 3);
+            // 检查是否已完成能力测试
+            const isTestCompleted = await ProficiencyTest.isTestCompleted();
+            const canUsePersonalized = await PersonalizedAnnotationService.canAnnotate();
 
-            if (complexSentences.length === 0) {
-                setIsProcessing(false);
-                return;
+            let annotations: WordAnnotation[] = [];
+
+            // 限制文本长度，提高处理速度
+            const maxTextLength = 3000;
+            const truncatedText = text.length > maxTextLength ? text.substring(0, maxTextLength) : text;
+
+            if (isTestCompleted && canUsePersonalized.can) {
+                // 使用个性化大模型标注
+                const response = await PersonalizedAnnotationService.annotate({
+                    text: truncatedText,
+                    title: pageTitle,
+                    url,
+                });
+
+                annotations = response.annotations.map(a => ({
+                    word: a.word,
+                    definition: a.definition,
+                    isNew: true,
+                    pos: a.pos,
+                    phonetic: a.phonetic,
+                }));
+            } else {
+                // 使用本地词典标注（原有逻辑）
+                const sentences = splitSentences(truncatedText);
+                const complexSentences = sentences.filter(s => estimateComplexity(s) >= 3);
+
+                if (complexSentences.length === 0) {
+                    setIsProcessing(false);
+                    return;
+                }
+
+                const analysis = await Dictionary.analyzeText(truncatedText);
+
+                if (analysis.newWordsCount === 0) {
+                    setIsProcessing(false);
+                    return;
+                }
+
+                annotations = analysis.words
+                    .filter(w => w.isNew)
+                    .map(w => ({
+                        word: w.word,
+                        definition: w.definition || '',
+                        isNew: true,
+                    }));
             }
 
-            const analysis = await Dictionary.analyzeText(text);
+            // 过滤已处理的单词
+            const newAnnotations = annotations.filter(a => {
+                const lowerWord = a.word.toLowerCase();
+                if (processedWordsRef.current.has(lowerWord)) {
+                    return false;
+                }
+                processedWordsRef.current.add(lowerWord);
+                return true;
+            });
 
-            if (analysis.newWordsCount === 0) {
-                setIsProcessing(false);
-                return;
-            }
-
-            const wordInfos: WordInfo[] = analysis.words.map(w => ({
-                word: w.word,
-                isNew: w.isNew,
-                definition: w.definition,
-            }));
-
-            const newAnnotations: WordAnnotation[] = [];
-
-            for (const wordInfo of wordInfos.filter(w => w.isNew)) {
-                const existingVocab = await Database.getVocabByWord(wordInfo.word);
+            // 保存到数据库
+            for (const annotation of newAnnotations) {
+                const existingVocab = await Database.getVocabByWord(annotation.word);
 
                 if (existingVocab) {
-                    await Database.incrementEncounterCount(wordInfo.word);
+                    await Database.incrementEncounterCount(annotation.word);
                 } else {
                     const vocabRecord: VocabRecord = {
-                        id: `${Date.now()}-${wordInfo.word}`,
-                        word: wordInfo.word,
+                        id: `${Date.now()}-${annotation.word}`,
+                        word: annotation.word,
                         status: 'new',
-                        phonetic: wordInfo.definition?.match(/\/.*?\//)?.[0],
-                        definition: wordInfo.definition,
+                        phonetic: annotation.phonetic,
+                        definition: annotation.definition,
                         encounterCount: 1,
                         firstSeenAt: Date.now(),
                         updatedAt: Date.now(),
                     };
                     await Database.saveVocab(vocabRecord);
                     await Database.recordLearningActivity('new');
-
-                    newAnnotations.push({
-                        word: wordInfo.word,
-                        definition: wordInfo.definition || '',
-                        isNew: true,
-                    });
                 }
             }
 
@@ -567,13 +623,13 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 setWordAnnotations(prev => [...prev, ...newAnnotations]);
             }
 
-            setProcessedCount(prev => prev + complexSentences.length);
+            setProcessedCount(prev => prev + 1);
         } catch (error) {
             console.error('处理页面内容失败:', error);
         } finally {
             setIsProcessing(false);
         }
-    }, [isProcessing]);
+    }, [isProcessing, url]);
 
     const highlightWordsInPage = useCallback(() => {
         if (wordAnnotations.length === 0) return;
@@ -592,6 +648,9 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
         if (navState.loading) {
             setHighlightedCount(0);
             setPageLoaded(false);
+            // 清空已处理单词集合，避免跨页面污染
+            processedWordsRef.current.clear();
+            setWordAnnotations([]);
         }
     };
 
@@ -604,6 +663,14 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     const handleMessage = (event: { nativeEvent: { data: string } }) => {
         try {
             const data = JSON.parse(event.nativeEvent.data);
+
+            if (data.type === 'page_content') {
+                const { text, title, isScroll } = data;
+                if (text && text.length > 100) {
+                    processPageContent(text, title, isScroll);
+                }
+                return;
+            }
 
             if (data.type === 'highlight_complete') {
                 setHighlightedCount(data.count);
@@ -621,8 +688,9 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 return;
             }
         } catch {
+            // 兼容旧格式
             const text = event.nativeEvent.data;
-            if (text && text.length > 100) {
+            if (text && text.length > 100 && !text.startsWith('{')) {
                 processPageContent(text);
             }
         }
@@ -642,6 +710,42 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
 
     const reload = () => {
         webViewRef.current?.reload();
+    };
+
+    // 在系统浏览器中打开当前页面
+    const openInSystemBrowser = async () => {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        try {
+            await WebBrowser.openBrowserAsync(url);
+        } catch (error) {
+            console.error('打开系统浏览器失败:', error);
+            Alert.alert('错误', '无法打开系统浏览器');
+        }
+    };
+
+    // 显示更多选项菜单
+    const showMoreOptions = () => {
+        Alert.alert(
+            '更多选项',
+            '',
+            [
+                {
+                    text: '在系统浏览器中打开',
+                    onPress: openInSystemBrowser,
+                },
+                {
+                    text: '分享链接',
+                    onPress: () => {
+                        // 可以集成 expo-sharing
+                        console.log('分享链接:', url);
+                    },
+                },
+                {
+                    text: '取消',
+                    style: 'cancel',
+                },
+            ]
+        );
     };
 
     const submitUrl = () => {
@@ -666,63 +770,58 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
         setProcessedCount(0);
     };
 
-    const renderWordModal = () => (
-        <Modal
-            visible={showWordModal}
-            transparent
-            animationType="fade"
-            onRequestClose={() => setShowWordModal(false)}
-        >
-            <TouchableOpacity
-                style={styles.modalOverlay}
-                activeOpacity={1}
-                onPress={() => setShowWordModal(false)}
-            >
-                <Animated.View
-                    entering={SlideInUp.springify()}
-                    exiting={SlideOutDown.springify()}
-                    style={[styles.wordModal, { backgroundColor: theme.colors.surface }]}
-                >
-                    <View style={styles.modalHeader}>
-                        <Text style={[styles.modalWord, { color: theme.colors.text }]}>
-                            {selectedWord?.word}
-                        </Text>
-                        {selectedWord?.isNew && (
-                            <View style={[styles.newBadge, { backgroundColor: theme.colors.error }]}>
-                                <Text style={styles.newBadgeText}>NEW</Text>
-                            </View>
-                        )}
-                    </View>
+    const handleSpeakWord = (word: string) => {
+        // 使用 WebView 的 TTS 功能
+        const script = `
+            if (window.speechSynthesis) {
+                const utterance = new SpeechSynthesisUtterance('${word}');
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            }
+            true;
+        `;
+        webViewRef.current?.injectJavaScript(script);
+    };
 
-                    {selectedWord?.definition && (
-                        <Text style={[styles.modalDefinition, { color: theme.colors.textSecondary }]}>
-                            {selectedWord.definition}
-                        </Text>
-                    )}
+    const handleAddToVocab = async () => {
+        if (!selectedWord) return;
 
-                    <View style={styles.modalActions}>
-                        <TouchableOpacity
-                            style={[styles.modalButton, { backgroundColor: theme.colors.primary }]}
-                            onPress={() => {
-                                setShowWordModal(false);
-                                navigation.navigate('Main');
-                            }}
-                        >
-                            <Ionicons name="book-outline" size={18} color="#fff" />
-                            <Text style={styles.modalButtonText}>查看生词本</Text>
-                        </TouchableOpacity>
+        try {
+            await Database.saveVocab({
+                id: Date.now().toString(),
+                word: selectedWord.word,
+                definition: selectedWord.definition,
+                status: 'new',
+                encounterCount: 1,
+                firstSeenAt: Date.now(),
+                updatedAt: Date.now(),
+            });
+            setShowWordModal(false);
+        } catch (error) {
+            console.error('添加到生词本失败:', error);
+        }
+    };
 
-                        <TouchableOpacity
-                            style={[styles.modalButton, { backgroundColor: theme.colors.surfaceSecondary }]}
-                            onPress={() => setShowWordModal(false)}
-                        >
-                            <Text style={[styles.modalButtonText, { color: theme.colors.text }]}>关闭</Text>
-                        </TouchableOpacity>
-                    </View>
-                </Animated.View>
-            </TouchableOpacity>
-        </Modal>
-    );
+    const renderWordModal = () => {
+        if (!showWordModal || !selectedWord) return null;
+
+        return (
+            <WordDetailCard
+                word={selectedWord.word}
+                definition={selectedWord.definition}
+                pos={selectedWord.pos}
+                phonetic={selectedWord.phonetic}
+                isNew={selectedWord.isNew}
+                onClose={() => setShowWordModal(false)}
+                onSpeak={() => handleSpeakWord(selectedWord.word)}
+                onAddToVocab={handleAddToVocab}
+                onViewDetails={() => {
+                    setShowWordModal(false);
+                    navigation.navigate('Main');
+                }}
+            />
+        );
+    };
 
     const renderBookmarks = () => (
         <View style={styles.bookmarksContainer}>
@@ -746,10 +845,70 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
         </View>
     );
 
+    // 渐进式标注：只处理视口内及附近的内容
     const injectedJavaScript = `
 (function() {
-    var text = document.body.innerText;
-    window.ReactNativeWebView.postMessage(text);
+    // 获取视口内及附近的内容（上下各扩展 500px）
+    function getVisibleText() {
+        const viewportHeight = window.innerHeight;
+        const scrollY = window.scrollY;
+        const buffer = 500; // 上下缓冲区
+
+        const range = document.createRange();
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            {
+                acceptNode: function(node) {
+                    var tag = node.parentElement.tagName;
+                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') {
+                        return NodeFilter.FILTER_REJECT;
+                    }
+                    return NodeFilter.FILTER_ACCEPT;
+                }
+            }
+        );
+
+        let visibleText = '';
+        let node;
+        while (node = walker.nextNode()) {
+            const rect = node.parentElement.getBoundingClientRect();
+            const elementTop = rect.top + scrollY;
+            const elementBottom = rect.bottom + scrollY;
+
+            // 检查元素是否在视口+缓冲区范围内
+            if (elementBottom >= scrollY - buffer && elementTop <= scrollY + viewportHeight + buffer) {
+                visibleText += node.textContent + ' ';
+            }
+        }
+
+        return visibleText;
+    }
+
+    var text = getVisibleText();
+    var title = document.title;
+    window.ReactNativeWebView.postMessage(JSON.stringify({
+        type: 'page_content',
+        text: text,
+        title: title,
+        isPartial: true
+    }));
+
+    // 监听滚动事件，延迟触发新的内容分析
+    var scrollTimeout;
+    window.addEventListener('scroll', function() {
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(function() {
+            var newText = getVisibleText();
+            window.ReactNativeWebView.postMessage(JSON.stringify({
+                type: 'page_content',
+                text: newText,
+                title: document.title,
+                isPartial: true,
+                isScroll: true
+            }));
+        }, 500); // 滚动停止 500ms 后触发
+    }, { passive: true });
 })();
 true;
     `;
@@ -792,6 +951,10 @@ true;
 
                     <TouchableOpacity onPress={reload} style={styles.navButton}>
                         <Ionicons name="refresh-outline" size={22} color={theme.colors.text} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={showMoreOptions} style={styles.navButton}>
+                        <Ionicons name="ellipsis-horizontal" size={22} color={theme.colors.text} />
                     </TouchableOpacity>
                 </View>
 
@@ -1001,59 +1164,5 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '500',
         marginTop: 8,
-    },
-    modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
-        justifyContent: 'flex-end',
-    },
-    wordModal: {
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        padding: 24,
-        paddingBottom: 40,
-    },
-    modalHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginBottom: 12,
-    },
-    modalWord: {
-        fontSize: 24,
-        fontWeight: '700',
-    },
-    newBadge: {
-        marginLeft: 12,
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    newBadgeText: {
-        color: '#fff',
-        fontSize: 11,
-        fontWeight: '600',
-    },
-    modalDefinition: {
-        fontSize: 16,
-        lineHeight: 24,
-        marginBottom: 20,
-    },
-    modalActions: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    modalButton: {
-        flex: 1,
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingVertical: 14,
-        borderRadius: 12,
-        gap: 8,
-    },
-    modalButtonText: {
-        color: '#fff',
-        fontSize: 14,
-        fontWeight: '600',
     },
 });

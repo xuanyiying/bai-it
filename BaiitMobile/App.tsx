@@ -19,12 +19,17 @@ import { SentencesScreen } from './src/screens/SentencesScreen';
 import { StatsScreen } from './src/screens/StatsScreen';
 import { WhitelistScreen } from './src/screens/WhitelistScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { ProficiencyTestScreen } from './src/screens/ProficiencyTestScreen';
+import { LoginScreen } from './src/screens/LoginScreen';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
 export type RootStackParamList = {
+  Login: undefined;
   Main: undefined;
   Browser: undefined;
   Whitelist: undefined;
   Settings: undefined;
+  ProficiencyTest: undefined;
 };
 
 export type MainTabParamList = {
@@ -65,7 +70,7 @@ function MainTabNavigator() {
           }
 
           return (
-            <Animated.View 
+            <Animated.View
               entering={focused ? FadeIn.duration(200) : undefined}
               style={{ alignItems: 'center', justifyContent: 'center' }}
             >
@@ -91,23 +96,23 @@ function MainTabNavigator() {
         headerShown: false,
       })}
     >
-      <Tab.Screen 
-        name="Home" 
+      <Tab.Screen
+        name="Home"
         component={HomeScreen}
         options={{ title: t('tabs.home') }}
       />
-      <Tab.Screen 
-        name="Vocab" 
+      <Tab.Screen
+        name="Vocab"
         component={VocabScreen}
         options={{ title: t('tabs.vocab') }}
       />
-      <Tab.Screen 
-        name="Sentences" 
+      <Tab.Screen
+        name="Sentences"
         component={SentencesScreen}
         options={{ title: t('tabs.sentences') }}
       />
-      <Tab.Screen 
-        name="Stats" 
+      <Tab.Screen
+        name="Stats"
         component={StatsScreen}
         options={{ title: t('tabs.stats') }}
       />
@@ -118,6 +123,7 @@ function MainTabNavigator() {
 function AppContent() {
   const { theme } = useTheme();
   const { t } = useLanguage();
+  const { isAuthenticated, isLoading } = useAuth();
 
   const navigationTheme = {
     dark: theme.isDark,
@@ -137,11 +143,19 @@ function AppContent() {
     },
   };
 
+  if (isLoading) {
+    return (
+      <View style={[styles.container, { backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center' }]}>
+        <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+      </View>
+    );
+  }
+
   return (
     <NavigationContainer theme={navigationTheme}>
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
-        <Stack.Navigator 
-          initialRouteName="Main"
+        <Stack.Navigator
+          initialRouteName={isAuthenticated ? "Main" : "Login"}
           screenOptions={{
             animation: 'slide_from_right',
             gestureEnabled: true,
@@ -151,23 +165,28 @@ function AppContent() {
             },
           }}
         >
-          <Stack.Screen 
-            name="Main" 
+          <Stack.Screen
+            name="Login"
+            component={LoginScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Main"
             component={MainTabNavigator}
             options={{ headerShown: false }}
           />
-          <Stack.Screen 
-            name="Browser" 
+          <Stack.Screen
+            name="Browser"
             component={BrowserScreen}
-            options={{ 
+            options={{
               title: t('browser.title'),
               headerShown: false,
             }}
           />
-          <Stack.Screen 
-            name="Whitelist" 
+          <Stack.Screen
+            name="Whitelist"
             component={WhitelistScreen}
-            options={{ 
+            options={{
               title: t('home.manageWhitelist'),
               presentation: 'modal',
               animation: 'slide_from_bottom',
@@ -180,10 +199,10 @@ function AppContent() {
               },
             }}
           />
-          <Stack.Screen 
-            name="Settings" 
+          <Stack.Screen
+            name="Settings"
             component={SettingsScreen}
-            options={{ 
+            options={{
               title: t('settings.title'),
               presentation: 'modal',
               animation: 'slide_from_bottom',
@@ -196,6 +215,11 @@ function AppContent() {
               },
             }}
           />
+          <Stack.Screen
+            name="ProficiencyTest"
+            component={ProficiencyTestScreen}
+            options={{ headerShown: false }}
+          />
         </Stack.Navigator>
         <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       </View>
@@ -207,7 +231,9 @@ export default function App() {
   return (
     <ThemeProvider>
       <LanguageProvider>
-        <AppContent />
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
       </LanguageProvider>
     </ThemeProvider>
   );

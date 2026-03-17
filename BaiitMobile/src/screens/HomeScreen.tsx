@@ -24,6 +24,7 @@ import { storage } from '../services/storage';
 import { ClipboardService, ClipboardTextEvent } from '../services/clipboard';
 import { Database, VocabRecord } from '../services/database';
 import { Dictionary } from '../services/dictionary';
+import { ProficiencyTest } from '../services/proficiency-test';
 import { ScanResult, WordInfo } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
@@ -47,7 +48,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const [todayStats, setTodayStats] = useState({
     newWords: 0,
     sentences: 0,
+    scanRecords: 0,
   });
+  const [proficiencyLevel, setProficiencyLevel] = useState<string | null>(null);
 
   const { theme } = useTheme();
   const { t } = useLanguage();
@@ -55,11 +58,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   useEffect(() => {
     loadSettings();
     loadTodayStats();
+    loadProficiencyLevel();
 
     return () => {
       ClipboardService.stopMonitoring();
     };
   }, []);
+
+  const loadProficiencyLevel = async () => {
+    const result = await ProficiencyTest.getResult();
+    if (result) {
+      setProficiencyLevel(ProficiencyTest.getLevelDescription(result.level));
+    }
+  };
 
   const loadSettings = async () => {
     const savedEnabled = await storage.get<boolean>('clipboardEnabled');
@@ -77,12 +88,19 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
   const loadTodayStats = async () => {
     const today = new Date().toISOString().split('T')[0];
     const record = await Database.getLearningRecord(today);
-    if (record) {
-      setTodayStats({
-        newWords: record.newWords,
-        sentences: record.sentencesCollected,
-      });
-    }
+
+    // 计算今日识别记录数
+    const savedResults = await storage.get<ScanResult[]>('results');
+    const todayResults = savedResults?.filter(r => {
+      const resultDate = new Date(r.timestamp).toISOString().split('T')[0];
+      return resultDate === today;
+    }) || [];
+
+    setTodayStats({
+      newWords: record?.newWords || 0,
+      sentences: record?.sentencesCollected || 0,
+      scanRecords: todayResults.length,
+    });
   };
 
   const startClipboardMonitoring = useCallback(() => {
@@ -201,6 +219,11 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     navigation.navigate('Browser');
   };
 
+  const openProficiencyTest = async () => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('ProficiencyTest');
+  };
+
   const renderStatCard = (value: number, label: string, icon: keyof typeof Ionicons.glyphMap, index: number) => (
     <Animated.View
       entering={FadeInDown.delay(staggerDelay(index, 80)).springify()}
@@ -271,12 +294,51 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
               {renderStatCard(todayStats.sentences, t('home.collectedSentences'), 'document-text-outline', 1)}
               <View style={[styles.statDivider, { backgroundColor: theme.colors.border }]} />
-              {renderStatCard(results.length, t('home.scanRecords'), 'scan-outline', 2)}
+              {renderStatCard(todayStats.scanRecords, t('home.scanRecords'), 'scan-outline', 2)}
             </View>
           </Card>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(250).springify()}>
+        <Animated.View entering={FadeInDown.delay(220).springify()}>
+          <Card
+            variant="elevated"
+            style={styles.proficiencyCard}
+            onPress={openProficiencyTest}
+          >
+            <View style={styles.proficiencyContent}>
+              <View style={[styles.proficiencyIcon, { backgroundColor: proficiencyLevel ? theme.colors.success + '15' : theme.colors.warning + '15' }]}>
+                <Ionicons
+                  name={proficiencyLevel ? "checkmark-circle" : "school-outline"}
+                  size={24}
+                  color={proficiencyLevel ? theme.colors.success : theme.colors.warning}
+                />
+              </View>
+              <View style={styles.proficiencyText}>
+                <Text style={[
+                  styles.proficiencyTitle,
+                  {
+                    color: theme.colors.text,
+                    fontWeight: theme.typography.fontWeight.semibold,
+                  }
+                ]}>
+                  {proficiencyLevel || '语言能力测试'}
+                </Text>
+                <Text style={[
+                  styles.proficiencySubtext,
+                  {
+                    color: theme.colors.textSecondary,
+                    fontSize: theme.typography.fontSize.sm,
+                  }
+                ]}>
+                  {proficiencyLevel ? '点击重新测试' : '完成测试获得个性化标注'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
+            </View>
+          </Card>
+        </Animated.View>
+
+        <Animated.View entering={FadeInDown.delay(280).springify()}>
           <Card
             variant="elevated"
             style={styles.browserButton}
@@ -532,6 +594,30 @@ const styles = StyleSheet.create({
   statDivider: {
     width: 1,
     height: 48,
+  },
+  proficiencyCard: {
+    marginBottom: 12,
+  },
+  proficiencyContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  proficiencyIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proficiencyText: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  proficiencyTitle: {
+    fontSize: 16,
+  },
+  proficiencySubtext: {
+    marginTop: 2,
   },
   browserButton: {
     marginBottom: 16,

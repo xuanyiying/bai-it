@@ -5,12 +5,94 @@
 
 import { Database } from './database';
 
-// 常用词列表（前 5000 高频词）
+// 常用词列表（前 3000 高频词 - 基础词汇不应被标注）
 const COMMON_WORDS = new Set([
-  'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
-  'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
-  // ... 这里应该包含完整的 5000 个常用词
-  // 为简化示例，只列出部分
+  // 功能词 (前100)
+  'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i', 'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
+  'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she', 'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their',
+  'what', 'so', 'up', 'out', 'if', 'about', 'who', 'get', 'which', 'go', 'me', 'when', 'make', 'can', 'like', 'time', 'no', 'just', 'him', 'know',
+  'take', 'people', 'into', 'year', 'your', 'good', 'some', 'could', 'them', 'see', 'other', 'than', 'then', 'now', 'look', 'only', 'come', 'its', 'over', 'think',
+  'also', 'back', 'after', 'use', 'two', 'how', 'our', 'work', 'first', 'well', 'way', 'even', 'new', 'want', 'because', 'any', 'these', 'give', 'day', 'most', 'us',
+  'is', 'was', 'are', 'were', 'been', 'has', 'had', 'did', 'does', 'doing', 'done', 'am', 'being', 'having',
+  // 基础动词 (101-300)
+  'go', 'come', 'take', 'make', 'get', 'see', 'know', 'think', 'say', 'tell', 'give', 'find', 'want', 'use', 'work', 'call', 'try', 'ask', 'need', 'feel',
+  'become', 'leave', 'put', 'mean', 'keep', 'let', 'begin', 'seem', 'help', 'show', 'hear', 'play', 'run', 'move', 'live', 'believe', 'bring', 'happen', 'stand', 'lose',
+  'pay', 'meet', 'include', 'continue', 'set', 'learn', 'change', 'lead', 'understand', 'watch', 'follow', 'stop', 'create', 'speak', 'read', 'allow', 'add', 'spend', 'grow', 'open',
+  'walk', 'offer', 'remember', 'love', 'consider', 'appear', 'buy', 'wait', 'serve', 'die', 'send', 'expect', 'build', 'stay', 'fall', 'cut', 'reach', 'kill', 'remain', 'suggest',
+  'raise', 'pass', 'sell', 'require', 'report', 'decide', 'pull', 'return', 'explain', 'carry', 'develop', 'hope', 'drive', 'break', 'receive', 'agree', 'support', 'remove', 'return', 'describe',
+  'create', 'add', 'apply', 'avoid', 'prepare', 'compare', 'declare', 'deliver', 'discover', 'encourage', 'ensure', 'establish', 'exist', 'expand', 'express', 'extend', 'face', 'fail', 'fill', 'finish',
+  'focus', 'force', 'forget', 'form', 'gain', 'gather', 'handle', 'hang', 'happen', 'head', 'hear', 'help', 'hide', 'hit', 'hold', 'hope', 'hurt', 'identify', 'ignore', 'imagine',
+  'improve', 'include', 'increase', 'indicate', 'influence', 'inform', 'insist', 'install', 'intend', 'introduce', 'invite', 'involve', 'join', 'jump', 'keep', 'kick', 'kill', 'kiss', 'knock', 'know',
+  'lack', 'last', 'laugh', 'lay', 'lead', 'learn', 'leave', 'lend', 'let', 'lie', 'like', 'limit', 'link', 'listen', 'live', 'look', 'lose', 'love', 'maintain', 'make',
+  'manage', 'matter', 'may', 'mean', 'measure', 'meet', 'mention', 'might', 'mind', 'miss', 'move', 'must', 'name', 'need', 'note', 'notice', 'obtain', 'occur', 'offer', 'open',
+  'order', 'ought', 'own', 'pass', 'pay', 'perform', 'perhaps', 'pick', 'place', 'plan', 'play', 'point', 'prefer', 'prepare', 'present', 'press', 'prevent', 'produce', 'promise', 'propose',
+  'protect', 'prove', 'provide', 'publish', 'pull', 'push', 'put', 'raise', 'reach', 'read', 'realize', 'receive', 'recognize', 'recommend', 'reduce', 'refer', 'reflect', 'refuse', 'regard', 'relate',
+  'release', 'remain', 'remember', 'remove', 'repeat', 'replace', 'reply', 'report', 'represent', 'require', 'research', 'rest', 'result', 'return', 'reveal', 'ride', 'ring', 'rise', 'risk', 'roll',
+  'run', 'save', 'say', 'see', 'seem', 'sell', 'send', 'serve', 'set', 'settle', 'shake', 'share', 'shift', 'shoot', 'should', 'shout', 'show', 'shut', 'sing', 'sit',
+  'sleep', 'slide', 'slip', 'smile', 'sort', 'sound', 'speak', 'spend', 'spread', 'spring', 'stand', 'start', 'state', 'stay', 'steal', 'stick', 'stop', 'stress', 'strike', 'struggle',
+  'study', 'submit', 'succeed', 'suffer', 'suggest', 'suit', 'supply', 'support', 'suppose', 'surprise', 'surround', 'survive', 'suspect', 'switch', 'take', 'talk', 'teach', 'tear', 'tell', 'tend',
+  'test', 'thank', 'think', 'throw', 'tie', 'touch', 'track', 'trade', 'train', 'transfer', 'travel', 'treat', 'trouble', 'trust', 'try', 'turn', 'twist', 'understand', 'undertake', 'unite',
+  'update', 'upgrade', 'upset', 'use', 'used', 'value', 'vary', 'visit', 'voice', 'vote', 'wait', 'wake', 'walk', 'want', 'warn', 'wash', 'watch', 'wave', 'wear', 'wed',
+  'weigh', 'welcome', 'whisper', 'win', 'wind', 'wish', 'wonder', 'work', 'worry', 'write', 'wrong', 'yield',
+  // 基础名词 (301-600)
+  'time', 'way', 'year', 'work', 'government', 'day', 'man', 'world', 'life', 'part', 'number', 'child', 'system', 'case', 'group', 'company', 'problem', 'hand', 'place', 'end',
+  'week', 'point', 'question', 'thing', 'eye', 'woman', 'country', 'area', 'person', 'information', 'issue', 'side', 'kind', 'head', 'house', 'service', 'friend', 'father', 'power', 'hour',
+  'game', 'line', 'member', 'law', 'car', 'city', 'community', 'name', 'president', 'team', 'minute', 'idea', 'kid', 'body', 'back', 'parent', 'face', 'others', 'level', 'office', 'door',
+  'health', 'art', 'war', 'history', 'party', 'result', 'change', 'morning', 'reason', 'research', 'girl', 'guy', 'moment', 'air', 'teacher', 'force', 'education', 'foot', 'boy', 'age',
+  'policy', 'everything', 'love', 'process', 'music', 'market', 'sense', 'nation', 'plan', 'college', 'interest', 'death', 'experience', 'effect', 'class', 'control', 'care', 'field', 'development', 'role',
+  'effort', 'rate', 'heart', 'drug', 'show', 'leader', 'light', 'voice', 'wife', 'police', 'mind', 'price', 'report', 'decision', 'son', 'view', 'town', 'building', 'blood', 'century',
+  'culture', 'billion', 'chance', 'brother', 'energy', 'period', 'course', 'summer', 'plant', 'opportunity', 'term', 'letter', 'condition', 'choice', 'rule', 'daughter', 'administration', 'south', 'husband', 'Congress',
+  'floor', 'campaign', 'material', 'population', 'call', 'economy', 'medical', 'hospital', 'church', 'close', 'risk', 'fire', 'future', 'defense', 'security', 'bank', 'west', 'sport', 'board', 'seek',
+  'per', 'subject', 'officer', 'private', 'rest', 'behavior', 'deal', 'performance', 'fight', 'throw', 'top', 'quickly', 'past', 'goal', 'second', 'order', 'author', 'represent', 'focus', 'foreign',
+  'drop', 'plan', 'blood', 'upon', 'agency', 'push', 'nature', 'color', 'store', 'sound', 'election', 'edge', 'individual', 'pay', 'message', 'please', 'condition', 'comment', 'element', 'finish',
+  'model', 'earth', 'design', 'attention', 'growth', 'activity', 'practice', 'piece', 'land', 'product', 'doctor', 'wall', 'patient', 'worker', 'news', 'test', 'movie', 'north', 'love', 'support',
+  'technology', 'step', 'baby', 'computer', 'type', 'attention', 'film', 'tree', 'source', 'organization', 'hair', 'look', 'century', 'evidence', 'window', 'difficult', 'listen', 'soon', 'culture', 'billion',
+  'chance', 'brother', 'energy', 'period', 'summer', 'plant', 'opportunity', 'term', 'letter', 'choice', 'rule', 'daughter', 'south', 'husband', 'floor', 'campaign', 'material', 'population', 'economy', 'hospital',
+  'church', 'close', 'risk', 'future', 'security', 'bank', 'west', 'sport', 'board', 'subject', 'officer', 'private', 'rest', 'behavior', 'deal', 'performance', 'fight', 'throw', 'top', 'goal',
+  'author', 'represent', 'focus', 'foreign', 'drop', 'agency', 'push', 'nature', 'color', 'store', 'sound', 'election', 'edge', 'individual', 'pay', 'message', 'comment', 'element', 'model', 'earth',
+  'design', 'growth', 'activity', 'practice', 'piece', 'land', 'product', 'doctor', 'wall', 'patient', 'worker', 'news', 'test', 'movie', 'north', 'technology', 'step', 'computer', 'type', 'film', 'tree',
+  'source', 'organization', 'hair', 'evidence', 'window', 'difficult', 'culture', 'billion', 'chance', 'brother', 'energy', 'period', 'summer', 'plant', 'opportunity', 'term', 'letter', 'choice', 'rule', 'daughter',
+  'south', 'husband', 'floor', 'campaign', 'material', 'population', 'economy', 'hospital', 'church', 'close', 'risk', 'future', 'security', 'bank', 'west', 'sport', 'board', 'subject', 'officer', 'private',
+  'rest', 'behavior', 'deal', 'performance', 'fight', 'throw', 'top', 'goal', 'author', 'represent', 'focus', 'foreign', 'drop', 'agency', 'push', 'nature', 'color', 'store', 'sound', 'election',
+  'edge', 'individual', 'pay', 'message', 'comment', 'element', 'model', 'earth', 'design', 'growth', 'activity', 'practice', 'piece', 'land', 'product', 'doctor', 'wall', 'patient', 'worker', 'news',
+  'test', 'movie', 'north', 'technology', 'step', 'computer', 'type', 'film', 'tree', 'source', 'organization', 'hair', 'evidence', 'window',
+  // 基础形容词/副词 (601-800)
+  'new', 'good', 'first', 'last', 'long', 'great', 'little', 'own', 'old', 'right', 'big', 'high', 'different', 'small', 'large', 'next', 'early', 'young', 'important', 'few',
+  'public', 'bad', 'same', 'able', 'sure', 'clear', 'easy', 'hard', 'early', 'late', 'best', 'better', 'strong', 'whole', 'free', 'true', 'full', 'special', 'recent', 'available',
+  'likely', 'certain', 'similar', 'common', 'single', 'major', 'current', 'final', 'short', 'simple', 'past', 'future', 'possible', 'real', 'human', 'local', 'social', 'political', 'national', 'international',
+  'economic', 'financial', 'medical', 'military', 'legal', 'environmental', 'cultural', 'historical', 'scientific', 'technical', 'professional', 'personal', 'physical', 'mental', 'emotional', 'spiritual', 'moral', 'ethical', 'practical', 'theoretical',
+  'direct', 'indirect', 'general', 'specific', 'particular', 'certain', 'sure', 'clear', 'obvious', 'apparent', 'evident', 'likely', 'possible', 'probable', 'certain', 'necessary', 'essential', 'important', 'significant', 'crucial',
+  'critical', 'vital', 'basic', 'fundamental', 'primary', 'secondary', 'main', 'major', 'minor', 'key', 'central', 'core', 'outer', 'inner', 'upper', 'lower', 'front', 'back', 'top', 'bottom',
+  'high', 'low', 'deep', 'shallow', 'wide', 'narrow', 'thick', 'thin', 'heavy', 'light', 'strong', 'weak', 'hard', 'soft', 'smooth', 'rough', 'sharp', 'blunt', 'bright', 'dark',
+  'light', 'heavy', 'hot', 'cold', 'warm', 'cool', 'dry', 'wet', 'clean', 'dirty', 'fresh', 'stale', 'sweet', 'sour', 'bitter', 'salty', 'loud', 'quiet', 'noisy', 'silent',
+  'fast', 'slow', 'quick', 'rapid', 'swift', 'speedy', 'gradual', 'sudden', 'immediate', 'instant', 'early', 'late', 'punctual', 'timely', 'untimely', 'regular', 'irregular', 'frequent', 'infrequent', 'rare',
+  'common', 'uncommon', 'usual', 'unusual', 'normal', 'abnormal', 'ordinary', 'extraordinary', 'average', 'typical', 'atypical', 'standard', 'nonstandard', 'conventional', 'unconventional', 'traditional', 'modern', 'old', 'new', 'ancient',
+  'recent', 'current', 'present', 'past', 'future', 'former', 'latter', 'first', 'last', 'initial', 'final', 'original', 'copy', 'fake', 'real', 'true', 'false', 'correct', 'incorrect', 'right',
+  'wrong', 'accurate', 'inaccurate', 'precise', 'imprecise', 'exact', 'inexact', 'specific', 'general', 'vague', 'clear', 'unclear', 'obvious', 'subtle', 'visible', 'invisible', 'apparent', 'hidden', 'open', 'closed',
+  'public', 'private', 'personal', 'professional', 'official', 'unofficial', 'formal', 'informal', 'casual', 'serious', 'funny', 'humorous', 'sad', 'happy', 'cheerful', 'joyful', 'delighted', 'pleased', 'satisfied', 'content',
+  'disappointed', 'frustrated', 'annoyed', 'irritated', 'angry', 'furious', 'mad', 'calm', 'peaceful', 'quiet', 'silent', 'noisy', 'loud', 'active', 'inactive', 'busy', 'idle', 'lazy', 'hardworking', 'diligent',
+  'careful', 'careless', 'cautious', 'reckless', 'safe', 'dangerous', 'risky', 'secure', 'insecure', 'stable', 'unstable', 'steady', 'unsteady', 'firm', 'loose', 'tight', 'strict', 'lenient', 'severe', 'mild',
+  'kind', 'cruel', 'friendly', 'unfriendly', 'polite', 'rude', 'respectful', 'disrespectful', 'honest', 'dishonest', 'sincere', 'insincere', 'genuine', 'fake', 'authentic', 'false', 'true', 'loyal', 'disloyal', 'faithful',
+  'unfaithful', 'trustworthy', 'untrustworthy', 'reliable', 'unreliable', 'dependable', 'undependable', 'responsible', 'irresponsible', 'mature', 'immature', 'sensible', 'foolish', 'wise', 'unwise', 'smart', 'intelligent', 'clever', 'stupid', 'silly',
+  'ridiculous', 'absurd', 'reasonable', 'unreasonable', 'logical', 'illogical', 'rational', 'irrational', 'sane', 'insane', 'conscious', 'unconscious', 'aware', 'unaware', 'alert', 'asleep', 'awake', 'tired', 'energetic', 'lively',
+  'active', 'passive', 'positive', 'negative', 'optimistic', 'pessimistic', 'realistic', 'idealistic', 'practical', 'impractical', 'theoretical', 'applied', 'abstract', 'concrete', 'physical', 'mental', 'spiritual', 'emotional', 'intellectual', 'academic'
+]);
+
+// 短单词过滤列表（长度<=3 通常是基础词汇）
+const SHORT_WORDS = new Set([
+  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'all', 'can', 'had', 'her', 'was', 'one', 'our', 'out', 'day', 'get', 'has', 'him', 'his',
+  'how', 'man', 'new', 'now', 'old', 'see', 'two', 'way', 'who', 'boy', 'did', 'its', 'let', 'put', 'say', 'she', 'too', 'use', 'dad', 'mom',
+  'act', 'add', 'age', 'ago', 'aid', 'air', 'all', 'any', 'arm', 'art', 'ask', 'bad', 'bag', 'bar', 'bat', 'bed', 'bet', 'bid', 'big', 'bit',
+  'box', 'bug', 'bus', 'buy', 'car', 'cat', 'cop', 'cow', 'cry', 'cup', 'cut', 'dog', 'dry', 'due', 'eat', 'egg', 'end', 'eye', 'fan', 'far',
+  'fat', 'fee', 'few', 'fit', 'fix', 'fly', 'fun', 'gap', 'gas', 'gay', 'get', 'god', 'got', 'gun', 'guy', 'gym', 'hat', 'hay', 'hit', 'hot',
+  'hug', 'hut', 'ice', 'ill', 'ink', 'inn', 'jam', 'jar', 'jaw', 'jet', 'job', 'joy', 'key', 'kid', 'kit', 'lab', 'lap', 'law', 'lay', 'leg',
+  'lid', 'lie', 'lip', 'log', 'lot', 'low', 'mad', 'map', 'mat', 'may', 'mix', 'mud', 'mug', 'nap', 'net', 'nod', 'nor', 'now', 'nut', 'oak',
+  'odd', 'off', 'oil', 'one', 'own', 'pad', 'pan', 'par', 'pat', 'pay', 'pea', 'pen', 'pet', 'pie', 'pig', 'pin', 'pit', 'pot', 'pro', 'pub',
+  'put', 'rag', 'ram', 'ran', 'rap', 'rat', 'raw', 'ray', 'red', 'rib', 'rid', 'rig', 'rim', 'rip', 'rob', 'rod', 'row', 'rub', 'rug', 'run',
+  'sad', 'sat', 'saw', 'sea', 'set', 'sew', 'sex', 'shy', 'sin', 'sip', 'sir', 'sit', 'six', 'ski', 'sky', 'sly', 'son', 'soy', 'spa', 'spy',
+  'sum', 'sun', 'tab', 'tag', 'tan', 'tap', 'tax', 'tea', 'ten', 'the', 'tie', 'tin', 'tip', 'toe', 'ton', 'too', 'top', 'tow', 'toy', 'try',
+  'tub', 'tug', 'two', 'use', 'van', 'vet', 'via', 'war', 'was', 'wax', 'way', 'web', 'wed', 'wet', 'who', 'why', 'win', 'wit', 'won', 'wow',
+  'yes', 'yet', 'you', 'zip', 'zoo'
 ]);
 
 // 基础词典数据（实际应用中应该从本地文件加载）
@@ -638,17 +720,54 @@ export const Dictionary = {
   },
 
   /**
-   * 检查是否为常见词
+   * 检查是否为常见词（基础词汇，不应被标注）
    */
   isCommonWord(word: string): boolean {
-    return COMMON_WORDS.has(word.toLowerCase().trim());
+    const w = word.toLowerCase().trim();
+    // 检查是否在常用词列表中，或者是短单词
+    return COMMON_WORDS.has(w) || SHORT_WORDS.has(w) || w.length <= 3;
+  },
+
+  /**
+   * 估算单词难度等级 (1-6, 6为最难)
+   */
+  estimateWordDifficulty(word: string): number {
+    const w = word.toLowerCase().trim();
+
+    // 如果是常见词，难度为1
+    if (this.isCommonWord(w)) {
+      return 1;
+    }
+
+    // 基础难度
+    let difficulty = 3;
+
+    // 根据长度增加难度
+    if (w.length >= 10) difficulty += 1;
+    if (w.length >= 13) difficulty += 1;
+
+    // 包含连字符或特殊字符增加难度
+    if (w.includes('-') || w.includes("'")) difficulty += 0.5;
+
+    // 检查是否有词典定义
+    const def = this.lookup(w);
+    if (!def) {
+      // 词典中没有的单词可能是专有名词或非常用词
+      difficulty += 1;
+    } else if (def.isCommon) {
+      // 词典中标记为常见的，降低难度
+      difficulty = Math.max(1, difficulty - 1);
+    }
+
+    return Math.min(6, Math.max(1, Math.round(difficulty)));
   },
 
   /**
    * 从文本中提取单词并标记生词
+   * 改进版：更智能的过滤和难度评估
    */
-  async analyzeText(text: string, userKnownWords?: Set<string>): Promise<{
-    words: { word: string; isNew: boolean; definition?: string }[];
+  async analyzeText(text: string, userKnownWords?: Set<string>, minDifficulty: number = 3): Promise<{
+    words: { word: string; isNew: boolean; definition?: string; difficulty?: number }[];
     newWordsCount: number;
     knownWordsCount: number;
   }> {
@@ -656,44 +775,59 @@ export const Dictionary = {
     const wordMatches = text.match(/\b[a-zA-Z]+(?:['-][a-zA-Z]+)?\b/g) || [];
     const uniqueWords = [...new Set(wordMatches.map(w => w.toLowerCase()))];
 
-    const words: { word: string; isNew: boolean; definition?: string }[] = [];
+    const words: { word: string; isNew: boolean; definition?: string; difficulty?: number }[] = [];
     let newWordsCount = 0;
     let knownWordsCount = 0;
 
     // 获取用户已掌握的单词
     const knownWords = userKnownWords || new Set();
 
+    // 需要过滤掉的模式
+    const skipPatterns = [
+      /^\d+$/,                    // 纯数字
+      /^[a-z]\./i,                // 单个字母缩写
+      /^[a-z]\.[a-z]\./i,         // 多字母缩写
+      /^(https?|ftp|www|com|org|net|io|app)$/i, // URL相关
+      /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)$/i, // 月份缩写
+      /^(mon|tue|wed|thu|fri|sat|sun)$/i, // 星期缩写
+    ];
+
     for (const word of uniqueWords) {
-      // 跳过纯数字
-      if (/^\d+$/.test(word)) continue;
+      // 应用过滤规则
+      if (skipPatterns.some(pattern => pattern.test(word))) continue;
 
       // 检查是否在用户已知单词中
       if (knownWords.has(word)) {
-        words.push({ word, isNew: false });
+        words.push({ word, isNew: false, difficulty: 1 });
+        knownWordsCount++;
+        continue;
+      }
+
+      // 检查是否为常见词（基础词汇）
+      if (this.isCommonWord(word)) {
+        words.push({ word, isNew: false, difficulty: 1 });
         knownWordsCount++;
         continue;
       }
 
       // 查询词典
       const def = this.lookup(word);
+      const difficulty = this.estimateWordDifficulty(word);
 
-      if (def) {
-        const isNew = !def.isCommon;
-        words.push({
-          word,
-          isNew,
-          definition: def.definition,
-        });
+      // 只标记难度 >= minDifficulty 的单词
+      const isNew = difficulty >= minDifficulty;
 
-        if (isNew) {
-          newWordsCount++;
-        } else {
-          knownWordsCount++;
-        }
-      } else {
-        // 词典中没有，视为生词
-        words.push({ word, isNew: true });
+      words.push({
+        word,
+        isNew,
+        definition: def?.definition,
+        difficulty,
+      });
+
+      if (isNew) {
         newWordsCount++;
+      } else {
+        knownWordsCount++;
       }
     }
 
