@@ -1,5 +1,5 @@
-/** llm-adapter 内部使用的扁平格式（从 provider 推导） */
-export interface LLMConfig {
+/** AI-adapter 内部使用的扁平格式（从 provider 推导） */
+export interface AIConfig {
     format: "gemini" | "openai-compatible";
     apiKey: string;
     baseUrl: string;
@@ -13,12 +13,12 @@ export interface ProviderConfig {
     model: string;
 }
 /** 多 Provider 存储结构 */
-export interface LLMMultiConfig {
+export interface AIMultiConfig {
     activeProvider: ProviderKey;
     providers: Record<ProviderKey, ProviderConfig>;
 }
 export interface BaitConfig {
-    llm: LLMMultiConfig;
+    AI: AIMultiConfig;
     sensitivity: number;
     scanThreshold: "short" | "medium" | "long";
     chunkGranularity: "coarse" | "medium" | "fine";
@@ -29,14 +29,14 @@ export declare const DEFAULT_PROVIDERS: Record<ProviderKey, ProviderConfig>;
 export declare const DEFAULT_CONFIG: BaitConfig;
 /** Provider 元数据（format / baseUrl 是常量，从 provider 名推导） */
 export declare const PROVIDER_META: Record<ProviderKey, {
-    format: LLMConfig["format"];
+    format: AIConfig["format"];
     baseUrl: string;
     label: string;
 }>;
-/** 从多 Provider 配置中解析出 LLMConfig（给 llm-adapter 用） */
-export declare function resolveLLMConfig(multi: LLMMultiConfig): LLMConfig;
+/** 从多 Provider 配置中解析出 AIConfig（给 AI-adapter 用） */
+export declare function resolveAIConfig(multi: AIMultiConfig): AIConfig;
 /** 旧格式升级到新格式（向后兼容） */
-export declare function migrateLLMConfig(raw: unknown): LLMMultiConfig;
+export declare function migrateAIConfig(raw: unknown): AIMultiConfig;
 export type Message = {
     type: "chunk";
     sentences: string[];
@@ -167,7 +167,7 @@ export interface PatternExampleRecord {
     updated_at: number;
     is_dirty: boolean;
 }
-/** learning_records — 阅读记录（只记 LLM 处理过的复杂句子） */
+/** learning_records — 阅读记录（只记 AI 处理过的复杂句子） */
 export interface LearningRecord {
     id: string;
     sentence: string;
@@ -180,7 +180,7 @@ export interface LearningRecord {
         definition: string;
     }[];
     source_url?: string;
-    llm_provider?: string;
+    AI_provider?: string;
     tokens_used?: number;
     created_at: number;
     updated_at: number;

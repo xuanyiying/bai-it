@@ -15,8 +15,6 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import Animated, {
   FadeIn,
-  FadeInRight,
-  FadeOut,
   FadeOutLeft,
   SlideInRight,
 } from 'react-native-reanimated';
@@ -137,7 +135,7 @@ export function ProficiencyTestScreen({ navigation }: ProficiencyTestScreenProps
           { icon: 'trending-up-outline', text: '适合难度的阅读材料' },
           { icon: 'time-outline', text: '仅需 2-3 分钟' },
         ].map((feature, index) => (
-          <View key={index} style={styles.featureItem}>
+          <View key={`feature-${index}`} style={styles.featureItem}>
             <Ionicons name={feature.icon as any} size={20} color={theme.colors.primary} />
             <Text style={[styles.featureText, { color: theme.colors.textSecondary }]}>
               {feature.text}
@@ -229,7 +227,7 @@ export function ProficiencyTestScreen({ navigation }: ProficiencyTestScreenProps
 
                 return (
                   <TouchableOpacity
-                    key={index}
+                    key={`option-${index}`}
                     style={[
                       styles.optionButton,
                       {
@@ -331,7 +329,7 @@ export function ProficiencyTestScreen({ navigation }: ProficiencyTestScreenProps
             </View>
             <View style={styles.focusList}>
               {result.recommendedFocus.map((focus, index) => (
-                <View key={index} style={styles.focusItem}>
+                <View key={`focus-${index}`} style={styles.focusItem}>
                   <View style={[styles.focusDot, { backgroundColor: theme.colors.primary }]} />
                   <Text style={[styles.focusText, { color: theme.colors.textSecondary }]}>
                     {focus}

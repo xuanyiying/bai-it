@@ -312,7 +312,7 @@ describe("learning_records CRUD", () => {
       pattern_key: "nested",
       new_words: [{ word: "collaborative", definition: "协作的" }],
       source_url: "https://example.com",
-      llm_provider: "gemini",
+      AI_provider: "gemini",
       tokens_used: 150,
     });
 
@@ -965,7 +965,7 @@ describe("跨表业务场景", () => {
       pattern_key: "nested",
       new_words: [{ word: "nested", definition: "嵌套的" }],
       source_url: "https://example.com",
-      llm_provider: "gemini",
+      AI_provider: "gemini",
       tokens_used: 200,
     });
 

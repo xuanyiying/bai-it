@@ -1,10 +1,10 @@
-import type { LLMMultiConfig } from "../../shared/types.ts";
+import type { AIMultiConfig } from "../../shared/types.ts";
 interface SettingsProps {
     config: {
-        llm: LLMMultiConfig;
+        AI: AIMultiConfig;
     };
     configLoading: boolean;
-    updateLLM: (partial: Partial<LLMMultiConfig>) => Promise<void>;
+    updateAI: (partial: Partial<AIMultiConfig>) => Promise<void>;
 }
-export declare function Settings({ config, configLoading: loading, updateLLM }: SettingsProps): any;
-export {};
+export declare function Settings({ config, configLoading: loading, updateAI }: SettingsProps): any;
+export { };

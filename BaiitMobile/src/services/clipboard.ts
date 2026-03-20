@@ -1,4 +1,3 @@
-import { Clipboard } from 'react-native';
 import * as ExpoClipboard from 'expo-clipboard';
 
 export interface ClipboardTextEvent {

@@ -29,7 +29,7 @@ export function App() {
 
   // Lifted state: DB and config
   const db = useDB();
-  const { config, loading: configLoading, saveConfig, updateLLM } = useConfig();
+  const { config, loading: configLoading, saveConfig, updateAI } = useConfig();
   const onboarding = useOnboardingState(db, config, configLoading);
 
   // Per-tab isExample — 只要有采集到的数据就不是示例
@@ -113,7 +113,7 @@ export function App() {
                   key={tabKey}
                   config={config}
                   configLoading={configLoading}
-                  updateLLM={updateLLM}
+                  updateAI={updateAI}
                 />
               )}
             </div>

@@ -5,7 +5,7 @@
 ```
 Chrome 扩展（单包，零后端）
 ├── Content Script — 全站自动扫读 + 手动触发 + 数据采集
-├── Background Service Worker — 调 LLM API、处理手动触发请求
+├── Background Service Worker — 调 AI API、处理手动触发请求
 ├── Popup — 站点开关、辅助力度、显示方式
 ├── Options 页（React）— 难句集（懒处理）、每日回味、总览、设置
 └── IndexedDB — 所有数据（含 pending_sentences 待分析队列）
@@ -33,9 +33,9 @@ Chrome 扩展（单包，零后端）
 │   │   ├── styles.ts         # CSS（复用旧项目）
 │   │   └── vocab-panel.ts    # 词汇面板（复用旧项目）
 │   ├── background/           # Service Worker
-│   │   └── index.ts          # LLM 调用、批量处理、缓存
+│   │   └── index.ts          # AI 调用、批量处理、缓存
 │   ├── popup/                # Popup UI
-│   │   └── index.ts          # 开关、模式切换、LLM 配置
+│   │   └── index.ts          # 开关、模式切换、AI 配置
 │   ├── options/              # Options 页（React）
 │   │   └── App.tsx           # 生词本、学习记录等
 │   └── shared/               # 共享模块
@@ -44,7 +44,7 @@ Chrome 扩展（单包，零后端）
 │       ├── scan-rules.ts     # 自动扫读本地拆分规则
 │       ├── cache.ts          # IndexedDB 缓存（复用旧项目）
 │       ├── db.ts             # IndexedDB 数据层（新写，10 张表，含 pending_sentences）
-│       └── llm-adapter.ts    # LLM 适配层（新写）
+│       └── AI-adapter.ts    # AI 适配层（新写）
 ├── data/
 │   ├── word-frequency.json   # 英文常用词频表（内置，离线）
 │   ├── dict-ecdict.json      # 通用离线词典（ECDICT 或类似开源词典）
@@ -60,16 +60,16 @@ Chrome 扩展（单包，零后端）
 
 ## 分块功能的技术实现
 
-### 两级处理：本地优先，LLM 兜底
+### 两级处理：本地优先，AI 兜底
 
-分块不是"全部本地"或"全部 LLM"，而是两级：
+分块不是"全部本地"或"全部 AI"，而是两级：
 
 ```
 句子进入
   ↓
 本地规则判断：能本地拆吗？
   ├── 能（大部分句子）→ 本地拆分 + 离线词典标注生词 → 即时显示
-  └── 不能（复杂句）→ 调 LLM 拆分 + LLM 返回语境化生词释义 → 1-2 秒后显示
+  └── 不能（复杂句）→ 调 AI 拆分 + AI 返回语境化生词释义 → 1-2 秒后显示
 ```
 
 不再区分扫读/细读两种模式。所有英文网页统一处理流程：
@@ -97,17 +97,17 @@ Chrome 扩展（单包，零后端）
 ### 手动触发处理流程
 
 1. **无 API key**：本地强制拆分（忽略长度阈值，调用 scanSplit 但 threshold 设为最低）
-2. **有 API key**：发 LLM 深度分析，返回分块 + 句式分类 + 讲解 + 表达 + 语境化释义
+2. **有 API key**：发 AI 深度分析，返回分块 + 句式分类 + 讲解 + 表达 + 语境化释义
 3. **数据采集**：手动触发的句子标记 `manual: true`，优先级高于自动采集
 
 ### 管理端懒处理流程
 
-用户打开管理端 → 从 `pending_sentences` 拉取未分析的句子 → 按页发 LLM（每页 10 条）→ 分析结果存入 `learning_records` → 下次不重复分析。详见 PRD「数据采集策略」。
+用户打开管理端 → 从 `pending_sentences` 拉取未分析的句子 → 按页发 AI（每页 10 条）→ 分析结果存入 `learning_records` → 下次不重复分析。详见 PRD「数据采集策略」。
 
 ### 删除的逻辑
 
 - ~~`detectReadingMode()`~~：不再按站点判断模式
-- ~~细读模式复杂度判断~~：不再自动发 LLM，统一由手动触发
+- ~~细读模式复杂度判断~~：不再自动发 AI，统一由手动触发
 - ~~模式自动判断表~~：不再维护站点-模式映射
 
 ## 生词系统的词汇来源
@@ -118,14 +118,14 @@ Chrome 扩展（单包，零后端）
    - V1 内置 AI 行业包
    - 每个包包含几百个术语及其行业语境释义
    - 用户在设置中勾选关注的行业
-   - 术语包生成方式：LLM + 搜索生成初稿，人工审核后内置
+   - 术语包生成方式：AI + 搜索生成初稿，人工审核后内置
 
 2. **通用离线词典**（data/dict-ecdict.json）
    - 开源词典（如 ECDICT，50+ 万词条）
    - 提供基础释义（可能有多个义项）
 
-3. **LLM 语境化释义**
-   - 仅在调 LLM 时获得（细读模式的复杂句 + 扫读模式的降级复杂句）
+3. **AI 语境化释义**
+   - 仅在调 AI 时获得（细读模式的复杂句 + 扫读模式的降级复杂句）
    - 基于上下文给出精准释义
 
 ### 已知词过滤
@@ -134,7 +134,7 @@ Chrome 扩展（单包，零后端）
 - 标注生词时自动跳过已掌握的词
 - 用得越久，标注越精准
 
-## LLM 适配层
+## AI 适配层
 
 支持两种 API 格式：
 
@@ -172,9 +172,9 @@ Chrome 扩展（单包，零后端）
 | `vocab_contexts` | 生词出处（原句、语境释义、来源 URL） |
 | `patterns` | 句式类型（that 从句嵌套等） |
 | `pattern_examples` | 句式实例（具体例句） |
-| `pending_sentences` | **待分析句子队列**（自动扫读 + 手动触发采集的原始句子，管理端按需发 LLM 分析） |
-| `learning_records` | 阅读记录（原文、分块结果、分析、`llm_provider`、`tokens_used`）— 由管理端懒处理写入 |
-| `settings` | 用户设置（含 `llm_provider`、`llm_model`、`llm_api_key`） |
+| `pending_sentences` | **待分析句子队列**（自动扫读 + 手动触发采集的原始句子，管理端按需发 AI 分析） |
+| `learning_records` | 阅读记录（原文、分块结果、分析、`AI_provider`、`tokens_used`）— 由管理端懒处理写入 |
+| `settings` | 用户设置（含 `AI_provider`、`AI_model`、`AI_api_key`） |
 | `weekly_reports` | 周报缓存 |
 | `review_items` | 间隔重复队列（SM-2 算法） |
 | `wallpaper_records` | 壁纸生成记录 |
@@ -219,8 +219,8 @@ Chrome 扩展（单包，零后端）
 | 模块 | 原因 |
 |------|------|
 | Content Script 主逻辑 | 加入两种模式判断、本地拆分路径 |
-| Background Service Worker | 从调 Cloudflare Workers → 直调 LLM API |
-| Popup | 加 LLM 配置、模式切换 |
+| Background Service Worker | 从调 Cloudflare Workers → 直调 AI API |
+| Popup | 加 AI 配置、模式切换 |
 | 数据存储层 | 从云端 D1 → 本地 IndexedDB（9 张表） |
 | 管理界面 | 从独立网站 → 插件 Options 页（React） |
 
@@ -229,7 +229,7 @@ Chrome 扩展（单包，零后端）
 | 模块 | 用途 |
 |------|------|
 | `scan-rules.ts` | 扫读模式本地拆分规则 |
-| `llm-adapter.ts` | LLM 适配层（Gemini + OpenAI 兼容） |
+| `AI-adapter.ts` | AI 适配层（Gemini + OpenAI 兼容） |
 | `db.ts` | IndexedDB 数据层（9 张表） |
 | `data/industry-ai.json` | AI 行业术语包 |
 | Options 页 | React 管理界面 |
@@ -271,7 +271,7 @@ function useOnboardingState(db: IDBDatabase | null, config: BaitConfig): {
 }
 ```
 
-- `hasKey`：遍历 `config.llm.providers`，任意一个 `apiKey` 非空
+- `hasKey`：遍历 `config.AI.providers`，任意一个 `apiKey` 非空
 - `hasData`：`learningRecordDAO.getAll(db).length > 0`
 
 **`src/options/components/OnboardingBanner.tsx`** — 提示条组件
@@ -327,10 +327,10 @@ function useOnboardingState(db: IDBDatabase | null, config: BaitConfig): {
 
 1. **项目骨架** — package.json、build.mjs、manifest.json、tsconfig.json
 2. **复制可复用代码** — rule-engine、renderer、styles、types、cache
-3. **LLM 适配层** — 先跑通一个最简单的分块请求（最小验证）
+3. **AI 适配层** — 先跑通一个最简单的分块请求（最小验证）
 4. **细读模式** — 基于旧 content script 改造，自动分块跑起来
 5. **扫读模式** — 新写 scan-rules.ts，加模式判断和切换
 6. **生词系统** — 离线词典 + 词频表 + AI 行业术语包 + 已知词过滤
-7. **Popup** — LLM 配置 + 模式切换
+7. **Popup** — AI 配置 + 模式切换
 8. **IndexedDB 数据层** — 9 张表
 9. **Options 页面（React）** — 生词本、学习记录等

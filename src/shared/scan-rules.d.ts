@@ -12,7 +12,7 @@
  * 设计原则：
  * - 即时完成（< 1ms），零 API 成本
  * - 宁可多拆不漏拆（扫读场景，快速理解优先）
- * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 LLM
+ * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 AI
  */
 export type Granularity = "coarse" | "medium" | "fine";
 export interface ScanChunk {
@@ -21,7 +21,7 @@ export interface ScanChunk {
 }
 export interface ScanChunkResult {
     chunks: ScanChunk[];
-    needsLLM: boolean;
+    needsAI: boolean;
 }
 /**
  * 扫读模式本地拆分
@@ -29,7 +29,7 @@ export interface ScanChunkResult {
  * @param sentence 要拆分的句子
  * @param threshold 长度阈值 ("short" | "medium" | "long")
  * @param granularity 拆分颗粒度 ("coarse" | "medium" | "fine")
- * @returns 拆分结果，包含分块和是否需要 LLM 降级
+ * @returns 拆分结果，包含分块和是否需要 AI 降级
  */
 export declare function scanSplit(sentence: string, threshold?: "short" | "medium" | "long", granularity?: Granularity): ScanChunkResult;
 /**

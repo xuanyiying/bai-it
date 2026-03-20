@@ -12,10 +12,11 @@
     "error": "错误"
   },
   "tabs": {
-    "home": "扫描",
+    "home": "阅读",
     "vocab": "生词本",
     "sentences": "句子",
-    "stats": "统计"
+    "stats": "统计",
+    "profile": "我的"
   },
   "home": {
     "title": "Bai-it 智能阅读助手",

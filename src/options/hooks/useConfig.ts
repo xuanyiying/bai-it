@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import type { BaitConfig, LLMMultiConfig } from "../../shared/types.ts";
-import { DEFAULT_CONFIG, migrateLLMConfig } from "../../shared/types.ts";
+import type { BaitConfig, AIMultiConfig } from "../../shared/types.ts";
+import { DEFAULT_CONFIG, migrateAIConfig } from "../../shared/types.ts";
 
 export function useConfig() {
   const [config, setConfig] = useState<BaitConfig>(DEFAULT_CONFIG);
@@ -13,7 +13,7 @@ export function useConfig() {
       const merged: BaitConfig = {
         ...DEFAULT_CONFIG,
         ...raw,
-        llm: migrateLLMConfig(raw.llm),
+        AI: migrateAIConfig(raw.AI),
       };
       if (!Array.isArray(merged.disabledSites)) merged.disabledSites = [];
       setConfig(merged);
@@ -24,25 +24,25 @@ export function useConfig() {
   const saveConfig = useCallback(async (partial: Partial<BaitConfig>) => {
     setConfig((prev) => {
       const updated = { ...prev, ...partial };
-      if (partial.llm) {
-        updated.llm = { ...prev.llm, ...partial.llm };
+      if (partial.AI) {
+        updated.AI = { ...prev.AI, ...partial.AI };
       }
       chrome.storage.sync.set(updated as Record<string, unknown>);
       return updated;
     });
   }, []);
 
-  const updateLLM = useCallback(async (partial: Partial<LLMMultiConfig>) => {
+  const updateAI = useCallback(async (partial: Partial<AIMultiConfig>) => {
     setConfig((prev) => {
-      const llm = { ...prev.llm, ...partial };
+      const AI = { ...prev.AI, ...partial };
       if (partial.providers) {
-        llm.providers = { ...prev.llm.providers, ...partial.providers };
+        AI.providers = { ...prev.AI.providers, ...partial.providers };
       }
-      const updated = { ...prev, llm };
+      const updated = { ...prev, AI };
       chrome.storage.sync.set(updated as Record<string, unknown>);
       return updated;
     });
   }, []);
 
-  return { config, loading, saveConfig, updateLLM };
+  return { config, loading, saveConfig, updateAI };
 }

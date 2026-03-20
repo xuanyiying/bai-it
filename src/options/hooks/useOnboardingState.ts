@@ -24,7 +24,7 @@ export function useOnboardingState(
   useEffect(() => {
     if (configLoading) return;
 
-    const hasApi = Object.values(config.llm.providers).some(
+    const hasApi = Object.values(config.AI.providers).some(
       (p) => p.apiKey && p.apiKey.trim() !== ""
     );
 

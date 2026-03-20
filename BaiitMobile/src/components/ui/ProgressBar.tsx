@@ -7,11 +7,9 @@ import Animated, {
   withSpring,
   withTiming,
   withDelay,
-  Easing,
-  interpolateColor,
 } from 'react-native-reanimated';
-import { useTheme } from '../../hooks/useTheme';
 import { animation } from '../../themes/tokens';
+import { useTheme } from '../../hooks/useTheme';
 
 interface ProgressBarProps {
   current: number;

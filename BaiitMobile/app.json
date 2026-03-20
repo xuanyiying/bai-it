@@ -16,7 +16,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.baiit.mobile"
+      "bundleIdentifier": "com.baiit.mobile",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "允许 BaiitMobile 使用 Face ID 进行身份验证"
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +30,12 @@
     },
     "plugins": [
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "33fa7e66-04c9-4f0b-921f-666b536420a7"
+      }
+    },
+    "owner": "altay-net"
   }
 }

@@ -3,11 +3,13 @@
  * 根据用户语言能力和语境，使用大模型智能标注生词
  */
 
-import { LLMConfig } from '../types';
+import { AIConfig, AIMultiConfig, resolveAIConfig } from '../types';
 import { storage } from './storage';
-import { ProficiencyTest, ProficiencyResult } from './proficiency-test';
+import { ProficiencyTest, ProficiencyResult, ProficiencyLevel } from './proficiency-test';
+import { SubscriptionService } from './subscription';
+import { Dictionary } from './dictionary';
 
-const LLM_CONFIG_KEY = 'llm_config';
+const AI_CONFIG_KEY = 'AI_config';
 
 export interface AnnotationResult {
   word: string;
@@ -118,11 +120,11 @@ Requirements:
 }
 
 /**
- * 调用 LLM API 进行个性化标注
+ * 调用 AI API 进行个性化标注
  */
-async function callLLMForAnnotation(
+async function callAIForAnnotation(
   prompt: string,
-  config: LLMConfig
+  config: AIConfig
 ): Promise<PersonalizedAnnotationResponse> {
   // 使用 format 字段判断 API 类型，如果没有则根据 baseUrl 判断
   const isGemini = config.format === 'gemini' ||
@@ -140,7 +142,7 @@ async function callLLMForAnnotation(
  */
 async function callGeminiAPI(
   prompt: string,
-  config: LLMConfig
+  config: AIConfig
 ): Promise<PersonalizedAnnotationResponse> {
   const model = config.model || 'gemini-2.0-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.apiKey}`;
@@ -178,7 +180,7 @@ async function callGeminiAPI(
  */
 async function callOpenAIAPI(
   prompt: string,
-  config: LLMConfig
+  config: AIConfig
 ): Promise<PersonalizedAnnotationResponse> {
   const baseUrl = config.baseUrl.replace(/\/+$/, '');
   const url = `${baseUrl}/v1/chat/completions`;
@@ -217,7 +219,7 @@ async function callOpenAIAPI(
 }
 
 /**
- * 解析 LLM 返回的标注结果
+ * 解析 AI 返回的标注结果
  */
 function parseAnnotationResponse(text: string): PersonalizedAnnotationResponse {
   // 去除可能的 markdown fence
@@ -258,27 +260,55 @@ function parseAnnotationResponse(text: string): PersonalizedAnnotationResponse {
  */
 export class PersonalizedAnnotationService {
   /**
-   * 获取 LLM 配置
+   * 获取 AI 配置（兼容旧格式和新格式）
    */
-  private static async getLLMConfig(): Promise<LLMConfig | null> {
-    return await storage.get<LLMConfig>(LLM_CONFIG_KEY);
+  private static async getAIConfig(): Promise<AIConfig | null> {
+    const raw = await storage.get<AIMultiConfig | AIConfig>(AI_CONFIG_KEY);
+    if (!raw) return null;
+
+    if ('activeProvider' in raw) {
+      return resolveAIConfig(raw as AIMultiConfig);
+    }
+    return raw as AIConfig;
   }
 
   /**
    * 检查是否可以进行个性化标注
    */
   static async canAnnotate(): Promise<{ can: boolean; reason?: string }> {
-    const config = await this.getLLMConfig();
-    if (!config || !config.apiKey) {
-      return { can: false, reason: '请先配置 LLM API' };
+    // 检查是否有订阅
+    const hasSubscription = await SubscriptionService.hasActiveSubscription();
+
+    // 获取AI配置
+    const rawConfig = await storage.get<AIMultiConfig | AIConfig>(AI_CONFIG_KEY);
+    let config: AIConfig | null = null;
+
+    if (rawConfig) {
+      if ('activeProvider' in rawConfig) {
+        config = resolveAIConfig(rawConfig as AIMultiConfig);
+      } else {
+        config = rawConfig as AIConfig;
+      }
     }
 
+    // 检查是否有有效的API配置
+    const hasApiKey = config && config.apiKey && config.apiKey.length > 0;
+
+    // 检查用户语言能力测试是否完成
     const proficiency = await ProficiencyTest.getResult();
     if (!proficiency) {
       return { can: false, reason: '请先完成语言能力测试' };
     }
 
-    return { can: true };
+    // 有订阅 或 有API配置 都可以使用
+    if (hasSubscription || hasApiKey) {
+      return { can: true };
+    }
+
+    return {
+      can: false,
+      reason: '需要订阅会员或配置AI服务提供商'
+    };
   }
 
   /**
@@ -292,11 +322,15 @@ export class PersonalizedAnnotationService {
       throw new Error(reason);
     }
 
-    const config = await this.getLLMConfig();
+    const config = await this.getAIConfig();
     const proficiency = await ProficiencyTest.getResult();
 
-    if (!config || !proficiency) {
-      throw new Error('Configuration not found');
+    if (!config || !config.apiKey) {
+      throw new Error('请先配置 AI API Key');
+    }
+
+    if (!proficiency) {
+      throw new Error('请先完成语言能力测试');
     }
 
     // 如果文本太长，分段处理
@@ -310,7 +344,7 @@ export class PersonalizedAnnotationService {
       title: request.title,
     });
 
-    return await callLLMForAnnotation(prompt, config);
+    return await callAIForAnnotation(prompt, config);
   }
 
   /**
@@ -318,7 +352,7 @@ export class PersonalizedAnnotationService {
    */
   private static async annotateLongText(
     request: PersonalizedAnnotationRequest,
-    config: LLMConfig,
+    config: AIConfig,
     proficiency: ProficiencyResult,
     maxLength: number
   ): Promise<PersonalizedAnnotationResponse> {
@@ -345,7 +379,7 @@ export class PersonalizedAnnotationService {
           url: request.url,
           title: request.title,
         });
-        return callLLMForAnnotation(prompt, config);
+        return callAIForAnnotation(prompt, config);
       })
     );
 
@@ -373,31 +407,45 @@ export class PersonalizedAnnotationService {
   }
 
   /**
-   * 快速标注（使用本地词典，无需 LLM）
+   * 快速标注（使用本地词典，无需 AI）
    * 用于离线场景或快速预览
    */
   static async annotateOffline(text: string): Promise<AnnotationResult[]> {
     const proficiency = await ProficiencyTest.getResult();
     const vocabLevel = proficiency?.level || 'intermediate';
 
-    // 简单的基于词频的标注
     const words = text.match(/\b[a-zA-Z]+\b/g) || [];
     const uniqueWords = [...new Set(words.map(w => w.toLowerCase()))];
 
-    // 根据用户水平过滤
-    const thresholdMap: Record<string, number> = {
-      beginner: 1000,
-      elementary: 2000,
-      intermediate: 4000,
-      upper_intermediate: 6000,
+    const thresholdMap: Record<ProficiencyLevel, number> = {
+      beginner: 500,
+      elementary: 1000,
+      intermediate: 2000,
+      upper_intermediate: 4000,
       advanced: 8000,
       proficient: 15000,
     };
 
-    const threshold = thresholdMap[vocabLevel] || 4000;
+    const results: AnnotationResult[] = [];
 
-    // 这里应该调用本地词典服务
-    // 暂时返回空数组，实际实现需要集成本地词典
-    return [];
+    for (const word of uniqueWords) {
+      if (word.length <= 3) continue;
+
+      const isCommon = Dictionary.isCommonWord(word);
+      if (isCommon) continue;
+
+      const def = Dictionary.lookup(word);
+      if (def) {
+        const difficulty = Dictionary.estimateWordDifficulty(word);
+        results.push({
+          word,
+          definition: def.definition,
+          phonetic: def.phonetic,
+          difficulty,
+        });
+      }
+    }
+
+    return results.sort((a, b) => b.difficulty - a.difficulty);
   }
 }

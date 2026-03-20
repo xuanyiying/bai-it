@@ -1,11 +1,11 @@
 /**
- * LLM 适配层
+ * AI 适配层
  *
  * 支持两种 API 格式：Gemini 和 OpenAI 兼容。
- * 在 Service Worker 中运行，直接调用 LLM API。
+ * 在 Service Worker 中运行，直接调用 AI API。
  */
 
-import type { LLMConfig, ChunkResult, FullAnalysisResult } from "../types";
+import type { AIConfig, ChunkResult, FullAnalysisResult } from "../types";
 
 // ========== Prompt 构建 ==========
 
@@ -84,9 +84,11 @@ export interface GeminiRequestBody {
   };
 }
 
-export function buildGeminiRequest(prompt: string, config: LLMConfig): { url: string; body: GeminiRequestBody } {
+export function buildGeminiRequest(prompt: string, config: AIConfig): { url: string; body: GeminiRequestBody } {
   const model = config.model || "gemini-2.0-flash";
-  const url = `${GEMINI_API_BASE}/${model}:generateContent?key=${config.apiKey}`;
+  // 支持自定义 baseUrl，否则使用默认
+  const baseUrl = config.baseUrl || GEMINI_API_BASE;
+  const url = `${baseUrl}/${model}:generateContent?key=${config.apiKey}`;
 
   const body: GeminiRequestBody = {
     contents: [{ parts: [{ text: prompt }] }],
@@ -107,7 +109,7 @@ export interface OpenAIRequestBody {
   response_format?: { type: string };
 }
 
-export function buildOpenAIRequest(prompt: string, config: LLMConfig): { url: string; body: OpenAIRequestBody; headers: Record<string, string> } {
+export function buildOpenAIRequest(prompt: string, config: AIConfig): { url: string; body: OpenAIRequestBody; headers: Record<string, string> } {
   const baseUrl = config.baseUrl.replace(/\/+$/, "");
   const url = `${baseUrl}/v1/chat/completions`;
 
@@ -131,7 +133,7 @@ export function buildOpenAIRequest(prompt: string, config: LLMConfig): { url: st
 
 // ========== 响应解析 ==========
 
-interface LLMChunkItem {
+interface AIChunkItem {
   index: number;
   original: string;
   chunked: string;
@@ -155,7 +157,7 @@ interface OpenAIResponse {
   }[];
 }
 
-export function parseGeminiResponse(data: unknown): LLMChunkItem[] {
+export function parseGeminiResponse(data: unknown): AIChunkItem[] {
   const response = data as GeminiResponse;
   const text = response?.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
@@ -164,7 +166,7 @@ export function parseGeminiResponse(data: unknown): LLMChunkItem[] {
   return parseChunkJson(text);
 }
 
-export function parseOpenAIResponse(data: unknown): LLMChunkItem[] {
+export function parseOpenAIResponse(data: unknown): AIChunkItem[] {
   const response = data as OpenAIResponse;
   const text = response?.choices?.[0]?.message?.content;
   if (!text) {
@@ -174,10 +176,10 @@ export function parseOpenAIResponse(data: unknown): LLMChunkItem[] {
 }
 
 /**
- * 解析 LLM 返回的 JSON 文本为 ChunkItem 数组
+ * 解析 AI 返回的 JSON 文本为 ChunkItem 数组
  * 兼容 markdown fence 包裹和直接 JSON
  */
-export function parseChunkJson(text: string): LLMChunkItem[] {
+export function parseChunkJson(text: string): AIChunkItem[] {
   // 去除可能的 markdown fence
   let cleaned = text.trim();
   const fenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
@@ -189,7 +191,7 @@ export function parseChunkJson(text: string): LLMChunkItem[] {
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new Error(`LLM 返回的 JSON 格式无效: ${cleaned.slice(0, 100)}...`);
+    throw new Error(`AI 返回的 JSON 格式无效: ${cleaned.slice(0, 100)}...`);
   }
 
   // 处理可能的外层包装（如 { results: [...] }）
@@ -202,10 +204,10 @@ export function parseChunkJson(text: string): LLMChunkItem[] {
   }
 
   if (!Array.isArray(parsed)) {
-    throw new Error("LLM 返回的不是数组格式");
+    throw new Error("AI 返回的不是数组格式");
   }
 
-  return (parsed as LLMChunkItem[]).map(item => ({
+  return (parsed as AIChunkItem[]).map(item => ({
     index: item.index ?? 0,
     original: item.original ?? "",
     chunked: item.chunked ?? item.original ?? "",
@@ -217,37 +219,39 @@ export function parseChunkJson(text: string): LLMChunkItem[] {
 // ========== 统一调用接口 ==========
 
 /**
- * 将 LLM 返回的 items 映射为 ChunkResult 数组
+ * 将 AI 返回的 items 映射为 ChunkResult 数组
  */
 export function mapToChunkResults(
   sentences: string[],
-  items: LLMChunkItem[]
+  items: AIChunkItem[]
 ): ChunkResult[] {
   return sentences.map((sentence, i) => {
     const match = items.find(item => item.index === i);
     if (!match) {
       return {
+        index: i,
         original: sentence,
         chunked: sentence,
-        isSimple: true,
-        newWords: [],
+        is_simple: true,
+        new_words: [],
       };
     }
     return {
+      index: i,
       original: match.original || sentence,
       chunked: match.chunked,
-      isSimple: match.is_simple,
-      newWords: match.new_words ?? [],
+      is_simple: match.is_simple,
+      new_words: match.new_words ?? [],
     };
   });
 }
 
 /**
- * 调用 LLM API 对句子进行分块
+ * 调用 AI API 对句子进行分块
  */
 export async function chunkSentences(
   sentences: string[],
-  config: LLMConfig,
+  config: AIConfig,
   knownWords: string[] = []
 ): Promise<ChunkResult[]> {
   const prompt = buildChunkPrompt(sentences, knownWords);
@@ -358,7 +362,7 @@ export function parseFullAnalysisJson(text: string): FullAnalysisResult {
   try {
     parsed = JSON.parse(cleaned);
   } catch {
-    throw new Error(`LLM 返回的 JSON 格式无效: ${cleaned.slice(0, 100)}...`);
+    throw new Error(`AI 返回的 JSON 格式无效: ${cleaned.slice(0, 100)}...`);
   }
 
   const obj = parsed as Record<string, unknown>;
@@ -371,6 +375,7 @@ export function parseFullAnalysisJson(text: string): FullAnalysisResult {
 
   return {
     chunked: String(obj.chunked || ""),
+    is_simple: false,
     pattern_key: patternKey,
     sentence_analysis: String(obj.sentence_analysis || ""),
     expression_tips: String(obj.expression_tips || ""),
@@ -385,7 +390,7 @@ export function parseFullAnalysisJson(text: string): FullAnalysisResult {
 }
 
 /**
- * 提取 LLM 响应文本（Gemini 或 OpenAI 格式）
+ * 提取 AI 响应文本（Gemini 或 OpenAI 格式）
  */
 function extractResponseText(data: unknown, format: "gemini" | "openai-compatible"): string {
   if (format === "gemini") {
@@ -402,11 +407,11 @@ function extractResponseText(data: unknown, format: "gemini" | "openai-compatibl
 }
 
 /**
- * 对单句进行完整 LLM 分析（句式、分块、讲解、表达、生词）
+ * 对单句进行完整 AI 分析（句式、分块、讲解、表达、生词）
  */
 export async function analyzeSentenceFull(
   sentence: string,
-  config: LLMConfig
+  config: AIConfig
 ): Promise<FullAnalysisResult> {
   const prompt = buildFullAnalysisPrompt(sentence);
 

@@ -12,10 +12,11 @@
     "error": "Error"
   },
   "tabs": {
-    "home": "Scan",
+    "home": "Read",
     "vocab": "Vocabulary",
     "sentences": "Sentences",
-    "stats": "Statistics"
+    "stats": "Statistics",
+    "profile": "Profile"
   },
   "home": {
     "title": "Bai-it Smart Reading Assistant",

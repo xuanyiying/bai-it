@@ -4,10 +4,18 @@
  */
 
 import * as AuthSession from 'expo-auth-session';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import * as WebBrowser from 'expo-web-browser';
 import { Platform } from 'react-native';
 import { storage } from './storage';
+
+let AppleAuthentication: typeof import('expo-apple-authentication') | null = null;
+if (Platform.OS === 'ios') {
+  try {
+    AppleAuthentication = require('expo-apple-authentication');
+  } catch (e) {
+    console.warn('expo-apple-authentication not available');
+  }
+}
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -124,12 +132,15 @@ export class AuthService {
    * Apple 登录
    */
   static async signInWithApple(): Promise<AuthUser | null> {
+    if (!AppleAuthentication) {
+      throw new Error('Apple 登录仅在 iOS 设备上可用');
+    }
+
     try {
-      // 检查是否支持 Apple 登录
       const isAvailable = await AppleAuthentication.isAvailableAsync();
 
       if (!isAvailable) {
-        throw new Error('此设备不支持 Apple 登录');
+        throw new Error('此设备不支持 Apple 登录（仅 iOS 13+ 支持）');
       }
 
       const credential = await AppleAuthentication.signInAsync({
@@ -156,11 +167,23 @@ export class AuthService {
       }
 
       return null;
-    } catch (error) {
+    } catch (error: any) {
       // 用户取消登录
-      if ((error as any).code === 'ERR_REQUEST_CANCELED') {
+      if (error.code === 'ERR_REQUEST_CANCELED' || error.code === 'ERR_CANCELED') {
         return null;
       }
+
+      // Apple 登录配置错误
+      if (error.code === 'ERR_REQUEST_UNKNOWN' || error.code === 1000) {
+        console.error('Apple 登录配置错误:', error);
+        throw new Error(
+          'Apple 登录配置错误。请确保：\n' +
+          '1. 在 Apple Developer 控制台启用了 Sign In with Apple\n' +
+          '2. 重新构建了开发客户端 (expo run:ios)\n' +
+          '3. 使用真机测试（模拟器可能不支持）'
+        );
+      }
+
       console.error('Apple 登录失败:', error);
       throw error;
     }
@@ -247,5 +270,34 @@ export class AuthService {
     }
 
     return user;
+  }
+
+  /**
+   * 模拟登录（用于开发和测试）
+   */
+  static async mockSignIn(provider: 'google' | 'apple' = 'google'): Promise<AuthUser> {
+    const mockUser: AuthUser = {
+      id: `mock-${provider}-${Date.now()}`,
+      email: `test@example.com`,
+      name: 'Test User',
+      photoUrl: provider === 'google'
+        ? 'https://ui-avatars.com/api/?name=Test+User&background=random'
+        : undefined,
+      provider,
+      accessToken: `mock-token-${Date.now()}`,
+      expiresAt: Date.now() + 3600 * 1000 * 24 * 7, // 7天
+    };
+
+    await this.saveUser(mockUser);
+    console.log('[Mock Auth] 模拟登录成功:', mockUser);
+    return mockUser;
+  }
+
+  /**
+   * 清除模拟登录数据
+   */
+  static async clearMockUser(): Promise<void> {
+    await this.signOut();
+    console.log('[Mock Auth] 模拟用户已清除');
   }
 }

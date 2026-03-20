@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
-import type { ProviderKey, LLMMultiConfig } from "../../shared/types.ts";
-import { DEFAULT_PROVIDERS, PROVIDER_META, resolveLLMConfig } from "../../shared/types.ts";
-import { chunkSentences } from "../../shared/llm-adapter.ts";
+import type { ProviderKey, AIMultiConfig } from "../../shared/types.ts";
+import { DEFAULT_PROVIDERS, PROVIDER_META, resolveAIConfig } from "../../shared/types.ts";
+import { chunkSentences } from "../../shared/AI-adapter.ts";
 import { GlassCard } from "../components/GlassCard.tsx";
 import { PROVIDER_INFO } from "../constants.ts";
 
@@ -10,12 +10,12 @@ const PROVIDER_KEYS: ProviderKey[] = ["gemini", "chatgpt", "deepseek", "qwen", "
 const TEST_SENTENCE = "Although the project had been delayed by several unexpected issues, the team managed to deliver a working prototype on time.";
 
 interface SettingsProps {
-  config: { llm: LLMMultiConfig };
+  config: { AI: AIMultiConfig };
   configLoading: boolean;
-  updateLLM: (partial: Partial<LLMMultiConfig>) => Promise<void>;
+  updateAI: (partial: Partial<AIMultiConfig>) => Promise<void>;
 }
 
-export function Settings({ config, configLoading: loading, updateLLM }: SettingsProps) {
+export function Settings({ config, configLoading: loading, updateAI }: SettingsProps) {
   const [activeProvider, setActiveProvider] = useState<ProviderKey>("gemini");
   const [verifyStatus, setVerifyStatus] = useState<Record<ProviderKey, "idle" | "checking" | "ok" | "error">>({
     gemini: "idle", chatgpt: "idle", deepseek: "idle", qwen: "idle", kimi: "idle",
@@ -24,33 +24,33 @@ export function Settings({ config, configLoading: loading, updateLLM }: Settings
 
   // Sync activeProvider from config once loaded
   useState(() => {
-    if (!loading && config.llm.activeProvider) {
-      setActiveProvider(config.llm.activeProvider);
+    if (!loading && config.AI.activeProvider) {
+      setActiveProvider(config.AI.activeProvider);
     }
   });
 
   const handleProviderSwitch = useCallback((p: ProviderKey) => {
     setActiveProvider(p);
-    updateLLM({ activeProvider: p });
-  }, [updateLLM]);
+    updateAI({ activeProvider: p });
+  }, [updateAI]);
 
   const handleKeyChange = useCallback((value: string) => {
-    const providers = { ...config.llm.providers };
+    const providers = { ...config.AI.providers };
     providers[activeProvider] = { ...providers[activeProvider], apiKey: value };
-    updateLLM({ providers });
+    updateAI({ providers });
     setVerifyStatus((prev) => ({ ...prev, [activeProvider]: "idle" }));
     setVerifyError("");
-  }, [activeProvider, config.llm.providers, updateLLM]);
+  }, [activeProvider, config.AI.providers, updateAI]);
 
   const handleModelChange = useCallback((value: string) => {
-    const providers = { ...config.llm.providers };
+    const providers = { ...config.AI.providers };
     providers[activeProvider] = { ...providers[activeProvider], model: value };
-    updateLLM({ providers });
+    updateAI({ providers });
     setVerifyStatus((prev) => ({ ...prev, [activeProvider]: "idle" }));
-  }, [activeProvider, config.llm.providers, updateLLM]);
+  }, [activeProvider, config.AI.providers, updateAI]);
 
   const handleVerify = useCallback(async () => {
-    const pc = config.llm.providers[activeProvider] ?? DEFAULT_PROVIDERS[activeProvider];
+    const pc = config.AI.providers[activeProvider] ?? DEFAULT_PROVIDERS[activeProvider];
     if (!pc.apiKey) {
       setVerifyError("请先填入 API Key");
       return;
@@ -61,11 +61,11 @@ export function Settings({ config, configLoading: loading, updateLLM }: Settings
 
     try {
       // 端到端验证：用真实句子走完整 chunkSentences 链路
-      const llmConfig = resolveLLMConfig({
+      const AIConfig = resolveAIConfig({
         activeProvider,
-        providers: config.llm.providers,
+        providers: config.AI.providers,
       });
-      const results = await chunkSentences([TEST_SENTENCE], llmConfig);
+      const results = await chunkSentences([TEST_SENTENCE], AIConfig);
 
       if (!results || results.length === 0 || !results[0].chunked) {
         throw new Error("API 返回了空结果，请检查模型是否可用");
@@ -84,11 +84,11 @@ export function Settings({ config, configLoading: loading, updateLLM }: Settings
         setVerifyError(msg);
       }
     }
-  }, [activeProvider, config.llm.providers]);
+  }, [activeProvider, config.AI.providers]);
 
   if (loading) return null;
 
-  const currentProviderConfig = config.llm.providers[activeProvider] ?? DEFAULT_PROVIDERS[activeProvider];
+  const currentProviderConfig = config.AI.providers[activeProvider] ?? DEFAULT_PROVIDERS[activeProvider];
   const providerInfo = PROVIDER_INFO[activeProvider];
   const status = verifyStatus[activeProvider];
 

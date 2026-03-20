@@ -3,7 +3,7 @@
  *
  * 职责：
  * 1. 统一扫读：所有英文网页自动本地拆分 + 标注生词
- * 2. 手动掰句：未拆开的句子挂触发按钮（无 API → 本地强制拆，有 API → LLM）
+ * 2. 手动掰句：未拆开的句子挂触发按钮（无 API → 本地强制拆，有 API → AI）
  * 3. 分块结果注入 DOM
  * 4. MutationObserver 监听动态内容
  */
@@ -512,7 +512,7 @@ function saveSentenceQuiet(text: string, manual: boolean, newWords: string[]): v
     source_hostname: window.location.hostname,
     manual,
     new_words: newWords,
-  }).catch(() => {});
+  }).catch(() => { });
 }
 
 // ========== DOM 手术：含链接元素的原地拆分 ==========
@@ -1017,7 +1017,7 @@ function addManualTrigger(el: Element, text: string): void {
       let result: ChunkResult | null = null;
 
       if (keyCheck.hasKey) {
-        // 有 API → 发 LLM 深度分析
+        // 有 API → 发 AI 深度分析
         const response = await sendMessage({
           type: "chunk",
           sentences: [text],

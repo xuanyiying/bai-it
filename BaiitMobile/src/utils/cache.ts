@@ -4,7 +4,12 @@
  */
 
 import type { ChunkResult, CacheEntry } from "../types";
-import { CACHE_TTL } from "../types";
+
+const CACHE_TTL = {
+  VOCAB: 24 * 60 * 60 * 1000, // 1天
+  SENTENCE: 7 * 24 * 60 * 60 * 1000, // 7天
+  ANALYSIS: 30 * 24 * 60 * 60 * 1000, // 30天
+};
 
 const DB_NAME = "openen-cache";
 const DB_VERSION = 1;
@@ -52,12 +57,12 @@ export async function getCached(sentence: string): Promise<ChunkResult | null> {
       const request = store.get(hash);
 
       request.onsuccess = () => {
-        const entry = request.result as CacheEntry | undefined;
+        const entry = request.result as { hash: string; result: ChunkResult; timestamp: number } | undefined;
         if (!entry) {
           resolve(null);
           return;
         }
-        if (Date.now() - entry.timestamp > CACHE_TTL) {
+        if (Date.now() - entry.timestamp > CACHE_TTL.SENTENCE) {
           deleteEntry(hash).catch(() => { });
           resolve(null);
           return;
@@ -90,8 +95,8 @@ export async function getCachedBatch(
             const hash = hashString(sentence);
             const request = store.get(hash);
             request.onsuccess = () => {
-              const entry = request.result as CacheEntry | undefined;
-              if (entry && Date.now() - entry.timestamp <= CACHE_TTL) {
+              const entry = request.result as { hash: string; result: ChunkResult; timestamp: number } | undefined;
+              if (entry && Date.now() - entry.timestamp <= CACHE_TTL.SENTENCE) {
                 results.set(sentence, entry.result);
               }
               resolve();
@@ -114,7 +119,7 @@ export async function setCache(sentence: string, result: ChunkResult): Promise<v
     const db = await openDB();
     const hash = hashString(sentence);
 
-    const entry: CacheEntry = {
+    const entry = {
       hash,
       result,
       timestamp: Date.now(),
@@ -140,7 +145,7 @@ export async function setCacheBatch(
 
     for (const { sentence, result } of pairs) {
       const hash = hashString(sentence);
-      store.put({ hash, result, timestamp: Date.now() } satisfies CacheEntry);
+      store.put({ hash, result, timestamp: Date.now() });
     }
   } catch {
     // 缓存失败不阻塞

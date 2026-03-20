@@ -15,399 +15,36 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as WebBrowser from 'expo-web-browser';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import Animated, {
-    FadeIn,
-    FadeOut,
-} from 'react-native-reanimated';
+import { useFocusEffect } from '@react-navigation/native';
+
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
-import { Dictionary } from '../services/dictionary';
 import { Database, VocabRecord } from '../services/database';
 import { storage } from '../services/storage';
-import { ProficiencyTest } from '../services/proficiency-test';
+import { ProficiencyTest, ProficiencyLevel } from '../services/proficiency-test';
 import { PersonalizedAnnotationService } from '../services/personalized-annotation';
-import { isEnglish, splitSentences, estimateComplexity } from '../utils/rule-engine';
+import * as VocabAnnotationService from '../services/vocab-annotation';
+import { isEnglish } from '../utils/rule-engine';
+import { generateHighlightScript, HIDE_ANNOTATIONS_SCRIPT, WordAnnotation } from '../utils/highlight-script';
 import { RootStackParamList } from '../../App';
 import { WordDetailCard } from '../components/WordDetailCard';
+import { useBrowser } from '../contexts/BrowserContext';
+import { generateVocabId } from '../utils/id-generator';
 
 type BrowserScreenProps = {
     navigation: NativeStackNavigationProp<RootStackParamList, 'Browser'>;
 };
 
-const BOOKMARKS_KEY = 'browser_bookmarks';
+const SEARCH_ENGINES = {
+    google: { name: 'Google', url: 'https://www.google.com/search?q=' },
+    bing: { name: 'Bing', url: 'https://www.bing.com/search?q=' },
+    baidu: { name: '百度', url: 'https://www.baidu.com/s?wd=' },
+} as const;
 
-const DEFAULT_BOOKMARKS = [
-    { name: 'Twitter', url: 'https://twitter.com' },
-    { name: 'Reddit', url: 'https://reddit.com' },
-    { name: 'Medium', url: 'https://medium.com' },
-    { name: 'Hacker News', url: 'https://news.ycombinator.com' },
-];
-
-interface WordAnnotation {
-    word: string;
-    definition: string;
-    isNew: boolean;
-    pos?: string;
-    phonetic?: string;
-}
-
-const HIGHLIGHT_SCRIPT_CODE = `
-(function() {
-    var words = WORDS_PLACEHOLDER;
-    
-    var style = document.createElement('style');
-    style.id = 'baiit-annotation-styles';
-    style.textContent = CSS_STYLES;
-    
-    if (!document.getElementById('baiit-annotation-styles')) {
-        document.head.appendChild(style);
-    }
-    
-    function speakWord(word) {
-        if (window.speechSynthesis) {
-            window.speechSynthesis.cancel();
-            var utterance = new SpeechSynthesisUtterance(word);
-            utterance.lang = 'en-US';
-            utterance.rate = 0.9;
-            window.speechSynthesis.speak(utterance);
-        }
-    }
-    
-    function removeTooltips() {
-        var tooltips = document.querySelectorAll('.baiit-tooltip');
-        for (var i = 0; i < tooltips.length; i++) {
-            tooltips[i].remove();
-        }
-    }
-    
-    function showTooltip(word, definition, isNew, pos, phonetic, element) {
-        removeTooltips();
-        
-        var tooltip = document.createElement('div');
-        tooltip.className = 'baiit-tooltip';
-        
-        var badgeHtml = isNew ? '<span class="baiit-tooltip-badge">NEW</span>' : '';
-        var posHtml = pos ? '<span class="baiit-tooltip-pos">' + pos + '</span>' : '';
-        var phoneticHtml = phonetic ? '<span class="baiit-tooltip-phonetic">' + phonetic + '</span>' : '';
-        var speakerHtml = '<span class="baiit-tooltip-speaker">🔊</span>';
-        
-        tooltip.innerHTML = '<div class="baiit-tooltip-header">' +
-            '<span class="baiit-tooltip-word-text">' + word + '</span>' +
-            speakerHtml + badgeHtml + '</div>' +
-            '<div class="baiit-tooltip-meta">' + posHtml + phoneticHtml + '</div>' +
-            '<div class="baiit-tooltip-definition">' + (definition || 'No definition available') + '</div>';
-        
-        document.body.appendChild(tooltip);
-        
-        var speakerBtn = tooltip.querySelector('.baiit-tooltip-speaker');
-        if (speakerBtn) {
-            speakerBtn.addEventListener('click', function(e) {
-                e.stopPropagation();
-                speakWord(word);
-            });
-        }
-        
-        var rect = element.getBoundingClientRect();
-        var tooltipRect = tooltip.getBoundingClientRect();
-        
-        var left = rect.left + rect.width / 2 - tooltipRect.width / 2;
-        var top = rect.bottom + 8;
-        
-        if (left < 10) left = 10;
-        if (left + tooltipRect.width > window.innerWidth - 10) {
-            left = window.innerWidth - tooltipRect.width - 10;
-        }
-        if (top + tooltipRect.height > window.innerHeight - 10) {
-            top = rect.top - tooltipRect.height - 8;
-        }
-        
-        tooltip.style.left = left + 'px';
-        tooltip.style.top = top + 'px';
-        
-        setTimeout(function() {
-            document.addEventListener('click', function closeTooltip() {
-                removeTooltips();
-                document.removeEventListener('click', closeTooltip);
-            });
-        }, 10);
-    }
-    
-    function escapeRegExp(str) {
-        var special = '.*+?^\${}()|[]\\\\';
-        var result = '';
-        for (var i = 0; i < str.length; i++) {
-            var c = str[i];
-            if (special.indexOf(c) !== -1) {
-                result += '\\\\' + c;
-            } else {
-                result += c;
-            }
-        }
-        return result;
-    }
-    
-    function highlightWords() {
-        var wordMap = {};
-        for (var i = 0; i < words.length; i++) {
-            wordMap[words[i].word.toLowerCase()] = words[i];
-        }
-        
-        var walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            {
-                acceptNode: function(node) {
-                    var tag = node.parentElement.tagName;
-                    if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'NOSCRIPT') {
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                    if (node.parentElement.classList.contains('baiit-word')) {
-                        return NodeFilter.FILTER_REJECT;
-                    }
-                    return NodeFilter.FILTER_ACCEPT;
-                }
-            }
-        );
-        
-        var textNodes = [];
-        while (walker.nextNode()) {
-            textNodes.push(walker.currentNode);
-        }
-        
-        var wordKeys = Object.keys(wordMap);
-        var highlightedElements = [];
-        
-        for (var n = 0; n < textNodes.length; n++) {
-            var node = textNodes[n];
-            var text = node.textContent;
-            var wordsToHighlight = [];
-            
-            for (var w = 0; w < wordKeys.length; w++) {
-                var word = wordKeys[w];
-                var escapedWord = escapeRegExp(word);
-                var regex = new RegExp('\\\\b' + escapedWord + '\\\\b', 'gi');
-                var match;
-                while ((match = regex.exec(text)) !== null) {
-                    wordsToHighlight.push({
-                        word: wordMap[word],
-                        index: match.index,
-                        length: match[0].length
-                    });
-                }
-            }
-            
-            if (wordsToHighlight.length === 0) continue;
-            
-            wordsToHighlight.sort(function(a, b) { return b.index - a.index; });
-            
-            var parent = node.parentNode;
-            var fragment = document.createDocumentFragment();
-            var lastIndex = text.length;
-            
-            for (var h = 0; h < wordsToHighlight.length; h++) {
-                var item = wordsToHighlight[h];
-                
-                if (lastIndex > item.index + item.length) {
-                    fragment.insertBefore(document.createTextNode(text.slice(item.index + item.length, lastIndex)), fragment.firstChild);
-                }
-                
-                var wrapper = document.createElement('span');
-                wrapper.className = 'baiit-annotation-wrapper';
-                wrapper.style.whiteSpace = 'pre-wrap';
-                
-                var span = document.createElement('span');
-                span.className = 'baiit-word' + (item.word.isNew ? ' baiit-word-new' : '');
-                span.textContent = text.slice(item.index, item.index + item.length);
-                span.setAttribute('data-word', item.word.word);
-                span.setAttribute('data-definition', item.word.definition || '');
-                span.setAttribute('data-is-new', item.word.isNew ? 'true' : 'false');
-                
-                var annotation = document.createElement('span');
-                annotation.className = 'baiit-annotation-inline' + (item.word.isNew ? ' baiit-annotation-new' : '');
-                
-                var pos = item.word.pos || '';
-                var defText = item.word.definition || '';
-                var shortDef = '';
-                
-                if (defText) {
-                    var defParts = defText.split(/[;]/);
-                    for (var d = 0; d < defParts.length; d++) {
-                        var part = defParts[d].trim();
-                        if (part && !part.match(/^\s*\[.*?\]\s*$/)) {
-                            shortDef = part.substring(0, 12);
-                            if (part.length > 12) shortDef += '...';
-                            break;
-                        }
-                    }
-                }
-                
-                var annotationText = '';
-                if (pos) annotationText += pos + ' ';
-                if (shortDef) annotationText += shortDef;
-                annotation.textContent = annotationText;
-                
-                wrapper.appendChild(span);
-                if (annotationText) {
-                    wrapper.appendChild(annotation);
-                }
-                
-                (function(wordInfo, spanEl) {
-                    spanEl.addEventListener('click', function(e) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        showTooltip(wordInfo.word, wordInfo.definition, wordInfo.isNew, wordInfo.pos, wordInfo.phonetic, spanEl);
-                    });
-                })(item.word, span);
-                
-                fragment.insertBefore(wrapper, fragment.firstChild);
-                lastIndex = item.index;
-                highlightedElements.push(wrapper);
-            }
-            
-            if (lastIndex > 0) {
-                fragment.insertBefore(document.createTextNode(text.slice(0, lastIndex)), fragment.firstChild);
-            }
-            
-            parent.replaceChild(fragment, node);
-        }
-        
-        var highlightedCount = document.querySelectorAll('.baiit-word').length;
-        window.ReactNativeWebView.postMessage(JSON.stringify({
-            type: 'highlight_complete',
-            count: highlightedCount
-        }));
-    }
-    
-    highlightWords();
-})();
-true;
-`;
-
-const CSS_STYLES = `
-.baiit-word {
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: underline;
-    text-decoration-style: dotted;
-    text-decoration-color: rgba(99, 102, 241, 0.6);
-    text-decoration-thickness: 2px;
-    text-underline-offset: 3px;
-    white-space: pre-wrap;
-}
-.baiit-word:hover {
-    text-decoration-color: rgba(99, 102, 241, 0.9);
-}
-.baiit-word-new {
-    text-decoration-color: rgba(239, 68, 68, 0.6);
-}
-.baiit-word-new:hover {
-    text-decoration-color: rgba(239, 68, 68, 0.9);
-}
-.baiit-annotation-wrapper {
-    position: relative;
-    display: inline-block;
-}
-.baiit-annotation-inline {
-    position: absolute;
-    bottom: -0.7em;
-    left: 0;
-    font-size: 0.6em;
-    color: rgba(99, 102, 241, 0.9);
-    white-space: nowrap;
-    line-height: 1;
-    pointer-events: none;
-    font-weight: 500;
-}
-.baiit-annotation-inline.baiit-annotation-new {
-    color: rgba(239, 68, 68, 0.9);
-}
-.baiit-tooltip {
-    position: fixed;
-    background: rgba(15, 23, 42, 0.95);
-    backdrop-filter: blur(12px);
-    border-radius: 12px;
-    padding: 12px 16px;
-    max-width: 300px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-    z-index: 999999;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    border: 1px solid rgba(255,255,255,0.1);
-    animation: baiit-fadeIn 0.2s ease;
-}
-.baiit-tooltip-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-}
-.baiit-tooltip-word-text {
-    font-size: 18px;
-    font-weight: 700;
-    color: #fff;
-}
-.baiit-tooltip-speaker {
-    cursor: pointer;
-    font-size: 16px;
-    padding: 4px;
-    border-radius: 4px;
-    transition: background 0.2s;
-}
-.baiit-tooltip-speaker:hover {
-    background: rgba(255,255,255,0.1);
-}
-.baiit-tooltip-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 8px;
-}
-.baiit-tooltip-pos {
-    font-size: 12px;
-    color: rgba(147, 197, 253, 0.9);
-    background: rgba(59, 130, 246, 0.2);
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: 500;
-}
-.baiit-tooltip-phonetic {
-    font-size: 13px;
-    color: rgba(255,255,255,0.7);
-    font-family: "Times New Roman", serif;
-}
-.baiit-tooltip-definition {
-    font-size: 14px;
-    color: rgba(255,255,255,0.9);
-    line-height: 1.6;
-}
-.baiit-tooltip-badge {
-    display: inline-block;
-    background: linear-gradient(135deg, #ef4444, #f97316);
-    color: white;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 4px;
-    font-weight: 500;
-}
-@keyframes baiit-fadeIn {
-    from { opacity: 0; transform: translateY(5px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-`;
-
-function generateHighlightScript(words: WordAnnotation[]): string {
-    return HIGHLIGHT_SCRIPT_CODE
-        .replace('WORDS_PLACEHOLDER', JSON.stringify(words))
-        .replace('CSS_STYLES', JSON.stringify(CSS_STYLES));
-}
+type SearchEngineKey = keyof typeof SEARCH_ENGINES;
 
 export function BrowserScreen({ navigation }: BrowserScreenProps) {
-    const [url, setUrl] = useState('https://twitter.com');
-    const [inputUrl, setInputUrl] = useState('https://twitter.com');
     const [isLoading, setIsLoading] = useState(true);
-    const [canGoBack, setCanGoBack] = useState(false);
-    const [canGoForward, setCanGoForward] = useState(false);
-    const [bookmarks, setBookmarks] = useState(DEFAULT_BOOKMARKS);
     const [showBookmarks, setShowBookmarks] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
     const [processedCount, setProcessedCount] = useState(0);
@@ -418,15 +55,40 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     const [pageLoaded, setPageLoaded] = useState(false);
     const [vocabLoaded, setVocabLoaded] = useState(false);
     const [showAnnotations, setShowAnnotations] = useState(true);
+    const [userLevel, setUserLevel] = useState<ProficiencyLevel>('intermediate');
+    const [annotationThreshold, setAnnotationThreshold] = useState<number>(2000);
+    const [showDensityPanel, setShowDensityPanel] = useState(false);
+    const [totalWordsOnPage, setTotalWordsOnPage] = useState(0);
 
     const webViewRef = useRef<WebView>(null);
+    const inputUrlRef = useRef<string>('');
+    const lastPageTextRef = useRef<{ text: string; title?: string } | null>(null);
     const { theme } = useTheme();
     const { t } = useLanguage();
+    const browser = useBrowser();
 
     useEffect(() => {
-        loadBookmarks();
         loadVocabWords();
+        // 加载保存的阈值设置
+        storage.get<number>('annotation_threshold').then(savedThreshold => {
+            if (savedThreshold) {
+                setAnnotationThreshold(savedThreshold);
+            }
+        });
     }, []);
+
+    // 初始化 inputUrlRef
+    useEffect(() => {
+        inputUrlRef.current = browser.inputUrl;
+    }, [browser.inputUrl]);
+
+    useFocusEffect(
+        useCallback(() => {
+            if (browser.lastVisitedUrl) {
+                setShowBookmarks(false);
+            }
+        }, [browser.lastVisitedUrl])
+    );
 
     useEffect(() => {
         if (pageLoaded && vocabLoaded && wordAnnotations.length > 0) {
@@ -452,22 +114,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     }, [showAnnotations, pageLoaded, wordAnnotations.length]);
 
     const hideAnnotations = () => {
-        webViewRef.current?.injectJavaScript(`
-            (function() {
-                var style = document.getElementById('baiit-annotation-styles');
-                if (style) {
-                    style.textContent = '.baiit-annotation-inline { display: none !important; } .baiit-word { text-decoration: none !important; cursor: default !important; }';
-                }
-            })();
-            true;
-        `);
-    };
-
-    const loadBookmarks = async () => {
-        const saved = await storage.get<typeof DEFAULT_BOOKMARKS>(BOOKMARKS_KEY);
-        if (saved) {
-            setBookmarks(saved);
-        }
+        webViewRef.current?.injectJavaScript(HIDE_ANNOTATIONS_SCRIPT);
     };
 
     const parseDefinition = (def: string): { pos: string; phonetic: string; cleanDef: string } => {
@@ -491,6 +138,13 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
 
     const loadVocabWords = async () => {
         try {
+            // 获取用户水平
+            const testResult = await ProficiencyTest.getResult();
+            if (testResult) {
+                setUserLevel(testResult.level);
+                setAnnotationThreshold(VocabAnnotationService.getThresholdForLevel(testResult.level));
+            }
+
             const vocab = await Database.getAllVocab();
             const annotations: WordAnnotation[] = vocab.map(v => {
                 const parsed = parseDefinition(v.definition || '');
@@ -513,7 +167,17 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     const processedWordsRef = useRef<Set<string>>(new Set());
 
     const processPageContent = useCallback(async (text: string, pageTitle?: string, isScroll = false) => {
-        if (isProcessing || !isEnglish(text)) return;
+        // 缓存页面内容，用于阈值调整后重新标注
+        lastPageTextRef.current = { text, title: pageTitle };
+
+        if (!isEnglish(text)) {
+            console.log('[Browser] 跳过：非英文内容');
+            return;
+        }
+        if (isProcessing) {
+            console.log('[Browser] 跳过：正在处理中');
+            return;
+        }
 
         // 滚动时检查是否有新内容需要处理
         if (isScroll) {
@@ -546,12 +210,15 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
             const maxTextLength = 3000;
             const truncatedText = text.length > maxTextLength ? text.substring(0, maxTextLength) : text;
 
+            console.log('[Browser] 开始处理文本:', truncatedText.length, '字符');
+            console.log('[Browser] isTestCompleted:', isTestCompleted, 'canUsePersonalized.can:', canUsePersonalized.can);
+
             if (isTestCompleted && canUsePersonalized.can) {
                 // 使用个性化大模型标注
                 const response = await PersonalizedAnnotationService.annotate({
                     text: truncatedText,
                     title: pageTitle,
-                    url,
+                    url: browser.currentUrl,
                 });
 
                 annotations = response.annotations.map(a => ({
@@ -562,33 +229,36 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                     phonetic: a.phonetic,
                 }));
             } else {
-                // 使用本地词典标注（原有逻辑）
-                const sentences = splitSentences(truncatedText);
-                const complexSentences = sentences.filter(s => estimateComplexity(s) >= 3);
+                // 使用新的生词标注服务（基于词频和用户水平）
+                console.log('[Browser] 使用本地词典标注，用户水平:', userLevel, '阈值:', annotationThreshold);
 
-                if (complexSentences.length === 0) {
+                const result = await VocabAnnotationService.annotateText(truncatedText, {
+                    userLevel,
+                    customThreshold: annotationThreshold,
+                    minDifficulty: 2,
+                });
+
+                console.log('[Browser] 标注结果: 总词数=', result.stats.totalWords, '标注=', result.stats.annotatedCount, '跳过常用=', result.stats.skippedCommon);
+
+                setTotalWordsOnPage(result.stats.totalWords);
+
+                if (result.annotations.length === 0) {
                     setIsProcessing(false);
                     return;
                 }
 
-                const analysis = await Dictionary.analyzeText(truncatedText);
-
-                if (analysis.newWordsCount === 0) {
-                    setIsProcessing(false);
-                    return;
-                }
-
-                annotations = analysis.words
-                    .filter(w => w.isNew)
-                    .map(w => ({
-                        word: w.word,
-                        definition: w.definition || '',
-                        isNew: true,
-                    }));
+                annotations = result.annotations.map(a => ({
+                    word: a.word,
+                    definition: a.definition,
+                    isNew: true,
+                    pos: a.pos,
+                    phonetic: a.phonetic,
+                }));
             }
 
             // 过滤已处理的单词
             const newAnnotations = annotations.filter(a => {
+                if (!a || typeof a.word !== 'string') return false;
                 const lowerWord = a.word.toLowerCase();
                 if (processedWordsRef.current.has(lowerWord)) {
                     return false;
@@ -604,15 +274,18 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 if (existingVocab) {
                     await Database.incrementEncounterCount(annotation.word);
                 } else {
+                    const id = await generateVocabId(annotation.word);
                     const vocabRecord: VocabRecord = {
-                        id: `${Date.now()}-${annotation.word}`,
+                        id,
                         word: annotation.word,
                         status: 'new',
                         phonetic: annotation.phonetic,
                         definition: annotation.definition,
                         encounterCount: 1,
-                        firstSeenAt: Date.now(),
-                        updatedAt: Date.now(),
+                        firstSeenAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString(),
+                        addedAt: new Date().toISOString(),
+                        reviewCount: 0,
                     };
                     await Database.saveVocab(vocabRecord);
                     await Database.recordLearningActivity('new');
@@ -620,6 +293,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
             }
 
             if (newAnnotations.length > 0) {
+                console.log('[Browser] 添加新标注:', newAnnotations.length, '词');
                 setWordAnnotations(prev => [...prev, ...newAnnotations]);
             }
 
@@ -629,26 +303,106 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
         } finally {
             setIsProcessing(false);
         }
-    }, [isProcessing, url]);
+    }, [isProcessing, browser.currentUrl]);
+
+    // 计算标注密度
+    const annotationDensity = totalWordsOnPage > 0
+        ? (highlightedCount / totalWordsOnPage * 100).toFixed(1)
+        : '0';
+
+    // 根据密度建议阈值调整
+    const getDensitySuggestion = () => {
+        const density = parseFloat(annotationDensity);
+        if (density > 15) {
+            return { message: '标注过多，建议提高阈值', action: 'increase' };
+        } else if (density < 3) {
+            return { message: '标注较少，可降低阈值', action: 'decrease' };
+        }
+        return { message: '标注密度适中', action: 'none' };
+    };
+
+    // 调整阈值并重新标注
+    const handleThresholdChange = (newThreshold: number) => {
+        setAnnotationThreshold(newThreshold);
+        // 清除已处理的单词，允许重新标注
+        processedWordsRef.current.clear();
+        setWordAnnotations([]);
+        setHighlightedCount(0);
+        // 保存阈值设置
+        storage.set('annotation_threshold', newThreshold);
+
+        // 如果有缓存的页面内容，立即重新标注
+        if (lastPageTextRef.current) {
+            setTimeout(() => {
+                processPageContent(
+                    lastPageTextRef.current!.text,
+                    lastPageTextRef.current!.title
+                );
+            }, 100);
+        }
+    };
+
+    // 长按单词标记为已掌握
+    const handleMarkAsMastered = async (word: string) => {
+        const lowerWord = word.toLowerCase();
+
+        // 从当前标注中移除
+        setWordAnnotations(prev => prev.filter(a => a.word.toLowerCase() !== lowerWord));
+
+        // 保存到数据库
+        try {
+            const vocab = await Database.getVocabByWord(lowerWord);
+            if (vocab) {
+                await Database.updateVocabStatus(vocab.id, 'mastered');
+            }
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        } catch (error) {
+            console.error('[Browser] 标记已掌握失败:', error);
+        }
+
+        // 在 WebView 中移除该词的标注
+        const script = `
+            (function() {
+                var elements = document.querySelectorAll('[data-word="${lowerWord}"]');
+                for (var i = 0; i < elements.length; i++) {
+                    var parent = elements[i].parentElement;
+                    if (parent && parent.className === 'baiit-annotation-wrapper') {
+                        var text = elements[i].textContent;
+                        var textNode = document.createTextNode(text);
+                        parent.parentNode.replaceChild(textNode, parent);
+                    }
+                }
+            })();
+            true;
+        `;
+        webViewRef.current?.injectJavaScript(script);
+    };
 
     const highlightWordsInPage = useCallback(() => {
         if (wordAnnotations.length === 0) return;
 
+        console.log('[Browser] 执行标注注入，当前标注数:', wordAnnotations.length);
         const script = generateHighlightScript(wordAnnotations);
         webViewRef.current?.injectJavaScript(script);
     }, [wordAnnotations]);
 
     const handleNavigationStateChange = (navState: WebViewNavigation) => {
-        setCanGoBack(navState.canGoBack);
-        setCanGoForward(navState.canGoForward);
-        setUrl(navState.url);
-        setInputUrl(navState.url);
+        console.log('[Browser] handleNavigationStateChange:', {
+            url: navState.url,
+            loading: navState.loading,
+            canGoBack: navState.canGoBack,
+            canGoForward: navState.canGoForward
+        });
+
+        browser.setCanGoBack(navState.canGoBack);
+        browser.setCanGoForward(navState.canGoForward);
+        browser.setCurrentUrl(navState.url);
+        browser.setInputUrl(navState.url);
         setIsLoading(navState.loading);
 
         if (navState.loading) {
             setHighlightedCount(0);
             setPageLoaded(false);
-            // 清空已处理单词集合，避免跨页面污染
             processedWordsRef.current.clear();
             setWordAnnotations([]);
         }
@@ -666,6 +420,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
 
             if (data.type === 'page_content') {
                 const { text, title, isScroll } = data;
+                console.log('[Browser] 收到页面内容:', text?.length, '字符, isScroll:', isScroll);
                 if (text && text.length > 100) {
                     processPageContent(text, title, isScroll);
                 }
@@ -673,6 +428,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
             }
 
             if (data.type === 'highlight_complete') {
+                console.log('[Browser] 收到标注完成消息:', data.count, '个词');
                 setHighlightedCount(data.count);
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 return;
@@ -697,13 +453,13 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     };
 
     const goBack = () => {
-        if (canGoBack) {
+        if (browser.canGoBack) {
             webViewRef.current?.goBack();
         }
     };
 
     const goForward = () => {
-        if (canGoForward) {
+        if (browser.canGoForward) {
             webViewRef.current?.goForward();
         }
     };
@@ -716,11 +472,23 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
     const openInSystemBrowser = async () => {
         await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         try {
-            await WebBrowser.openBrowserAsync(url);
+            await WebBrowser.openBrowserAsync(browser.currentUrl);
         } catch (error) {
             console.error('打开系统浏览器失败:', error);
             Alert.alert('错误', '无法打开系统浏览器');
         }
+    };
+
+    const switchSearchEngine = async () => {
+        const options: Array<{ text: string; onPress: () => void; style?: 'cancel' }> = Object.entries(SEARCH_ENGINES).map(([key, engine]) => ({
+            text: engine.name,
+            onPress: async () => {
+                browser.setSearchEngine(key as SearchEngineKey);
+            },
+        }));
+        options.push({ text: '取消', style: 'cancel', onPress: () => { } });
+
+        Alert.alert('选择搜索引擎', '', options);
     };
 
     // 显示更多选项菜单
@@ -736,8 +504,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 {
                     text: '分享链接',
                     onPress: () => {
-                        // 可以集成 expo-sharing
-                        console.log('分享链接:', url);
+                        console.log('分享链接:', browser.currentUrl);
                     },
                 },
                 {
@@ -750,21 +517,44 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
 
     const submitUrl = () => {
         Keyboard.dismiss();
-        let finalUrl = inputUrl.trim();
+        // 使用 ref 获取最新的输入值，避免状态更新延迟
+        let finalUrl = (inputUrlRef.current || browser.inputUrl).trim();
 
-        if (!finalUrl.startsWith('http://') && !finalUrl.startsWith('https://')) {
-            finalUrl = 'https://' + finalUrl;
+        console.log('[Browser] submitUrl input:', finalUrl, 'length:', finalUrl.length);
+
+        if (!finalUrl) return;
+
+        const hasProtocol = finalUrl.startsWith('http://') || finalUrl.startsWith('https://');
+
+        // 检查是否是域名格式：包含至少一个点，点前后有字符
+        // 支持：example.com, www.example.com, expo.dev, react.dev, example.com/path
+        const domainPattern = /^[a-zA-Z0-9][a-zA-Z0-9-]*\.[a-zA-Z0-9][a-zA-Z0-9.-]*$/;
+        const domainPart = finalUrl.split('/')[0].split('?')[0];
+        const looksLikeDomain = domainPattern.test(domainPart);
+
+        console.log('[Browser] submitUrl:', { input: finalUrl, domainPart, looksLikeDomain, hasProtocol });
+
+        if (!hasProtocol) {
+            if (looksLikeDomain) {
+                finalUrl = 'https://' + finalUrl;
+            } else {
+                finalUrl = `${SEARCH_ENGINES[browser.searchEngine].url}${encodeURIComponent(finalUrl)}`;
+            }
         }
 
-        setUrl(finalUrl);
+        console.log('[Browser] finalUrl:', finalUrl, 'length:', finalUrl.length);
+
+        browser.setCurrentUrl(finalUrl);
+        browser.setInputUrl(finalUrl);
+        inputUrlRef.current = finalUrl;
         setShowBookmarks(false);
         setHighlightedCount(0);
         setProcessedCount(0);
     };
 
     const openBookmark = (bookmarkUrl: string) => {
-        setUrl(bookmarkUrl);
-        setInputUrl(bookmarkUrl);
+        browser.setCurrentUrl(bookmarkUrl);
+        browser.setInputUrl(bookmarkUrl);
         setShowBookmarks(false);
         setHighlightedCount(0);
         setProcessedCount(0);
@@ -785,16 +575,18 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
 
     const handleAddToVocab = async () => {
         if (!selectedWord) return;
-
+        const id = await generateVocabId(selectedWord.word);
         try {
             await Database.saveVocab({
-                id: Date.now().toString(),
+                id,
                 word: selectedWord.word,
                 definition: selectedWord.definition,
                 status: 'new',
                 encounterCount: 1,
-                firstSeenAt: Date.now(),
-                updatedAt: Date.now(),
+                firstSeenAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+                addedAt: new Date().toISOString(),
+                reviewCount: 0,
             });
             setShowWordModal(false);
         } catch (error) {
@@ -815,6 +607,7 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 onClose={() => setShowWordModal(false)}
                 onSpeak={() => handleSpeakWord(selectedWord.word)}
                 onAddToVocab={handleAddToVocab}
+                onMarkAsMastered={() => handleMarkAsMastered(selectedWord.word)}
                 onViewDetails={() => {
                     setShowWordModal(false);
                     navigation.navigate('Main');
@@ -829,9 +622,9 @@ export function BrowserScreen({ navigation }: BrowserScreenProps) {
                 {t('browser.quickAccess')}
             </Text>
             <View style={styles.bookmarksGrid}>
-                {bookmarks.map((bookmark, index) => (
+                {browser.bookmarks.map((bookmark) => (
                     <TouchableOpacity
-                        key={index}
+                        key={bookmark.id}
                         style={[styles.bookmarkItem, { backgroundColor: theme.colors.surface }]}
                         onPress={() => openBookmark(bookmark.url)}
                     >
@@ -917,35 +710,48 @@ true;
         <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]} edges={['top']}>
             <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
                 <View style={styles.urlBar}>
-                    <TouchableOpacity onPress={goBack} disabled={!canGoBack} style={styles.navButton}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.navButton}>
+                        <Ionicons name="arrow-back" size={24} color={theme.colors.text} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity onPress={goBack} disabled={!browser.canGoBack} style={styles.navButton}>
                         <Ionicons
                             name="chevron-back"
                             size={24}
-                            color={canGoBack ? theme.colors.text : theme.colors.textSecondary}
+                            color={browser.canGoBack ? theme.colors.text : theme.colors.textSecondary}
                         />
                     </TouchableOpacity>
 
                     <View style={[styles.inputContainer, { backgroundColor: theme.colors.background }]}>
-                        <Ionicons name="search-outline" size={16} color={theme.colors.textSecondary} />
+                        <TouchableOpacity onPress={switchSearchEngine} style={styles.searchEngineButton}>
+                            <Text style={[styles.searchEngineText, { color: theme.colors.primary }]}>
+                                {SEARCH_ENGINES[browser.searchEngine].name}
+                            </Text>
+                        </TouchableOpacity>
                         <TextInput
                             style={[styles.urlInput, { color: theme.colors.text }]}
-                            value={inputUrl}
-                            onChangeText={setInputUrl}
+                            value={browser.inputUrl}
+                            onChangeText={(text) => {
+                                inputUrlRef.current = text;
+                                browser.setInputUrl(text);
+                            }}
                             onSubmitEditing={submitUrl}
                             returnKeyType="go"
                             autoCapitalize="none"
                             autoCorrect={false}
+                            spellCheck={false}
+                            textContentType="URL"
                             placeholder={t('browser.enterUrl')}
                             placeholderTextColor={theme.colors.textSecondary}
                         />
                         {isLoading && <ActivityIndicator size="small" color={theme.colors.primary} />}
                     </View>
 
-                    <TouchableOpacity onPress={goForward} disabled={!canGoForward} style={styles.navButton}>
+                    <TouchableOpacity onPress={goForward} disabled={!browser.canGoForward} style={styles.navButton}>
                         <Ionicons
                             name="chevron-forward"
                             size={24}
-                            color={canGoForward ? theme.colors.text : theme.colors.textSecondary}
+                            color={browser.canGoForward ? theme.colors.text : theme.colors.textSecondary}
                         />
                     </TouchableOpacity>
 
@@ -960,42 +766,30 @@ true;
 
                 <View style={styles.statusBar}>
                     {isProcessing && (
-                        <Animated.View
-                            entering={FadeIn}
-                            exiting={FadeOut}
-                            style={styles.statusItem}
-                        >
+                        <View style={styles.statusItem}>
                             <ActivityIndicator size="small" color={theme.colors.primary} />
                             <Text style={[styles.statusText, { color: theme.colors.primary }]}>
                                 {t('browser.processing')}
                             </Text>
-                        </Animated.View>
+                        </View>
                     )}
 
                     {highlightedCount > 0 && !isProcessing && (
-                        <Animated.View
-                            entering={FadeIn}
-                            exiting={FadeOut}
-                            style={styles.statusItem}
-                        >
+                        <View style={styles.statusItem}>
                             <Ionicons name="sparkles" size={14} color={theme.colors.success} />
                             <Text style={[styles.statusText, { color: theme.colors.success }]}>
                                 已标注 {highlightedCount} 个生词
                             </Text>
-                        </Animated.View>
+                        </View>
                     )}
 
                     {processedCount > 0 && highlightedCount === 0 && !isProcessing && (
-                        <Animated.View
-                            entering={FadeIn}
-                            exiting={FadeOut}
-                            style={styles.statusItem}
-                        >
+                        <View style={styles.statusItem}>
                             <Ionicons name="checkmark-circle" size={14} color={theme.colors.success} />
                             <Text style={[styles.statusText, { color: theme.colors.success }]}>
                                 {t('browser.processed', { count: processedCount })}
                             </Text>
-                        </Animated.View>
+                        </View>
                     )}
                 </View>
 
@@ -1008,7 +802,7 @@ true;
                 <View style={styles.webViewContainer}>
                     <WebView
                         ref={webViewRef}
-                        source={{ uri: url }}
+                        source={{ uri: browser.currentUrl }}
                         style={styles.webView}
                         onNavigationStateChange={handleNavigationStateChange}
                         onLoadEnd={handleLoadEnd}
@@ -1024,18 +818,113 @@ true;
                         domStorageEnabled={true}
                         thirdPartyCookiesEnabled={true}
                         sharedCookiesEnabled={true}
-                        onShouldStartLoadWithRequest={() => true}
+                        onShouldStartLoadWithRequest={(request) => {
+                            console.log('[Browser] onShouldStartLoadWithRequest:', {
+                                url: request.url,
+                                navigationType: request.navigationType,
+                                isTopFrame: request.isTopFrame
+                            });
+                            // 允许所有导航请求
+                            return true;
+                        }}
+                        onOpenWindow={(event) => {
+                            // 处理 target="_blank" 链接，在当前 WebView 中打开
+                            if (event.nativeEvent.targetUrl) {
+                                browser.setCurrentUrl(event.nativeEvent.targetUrl);
+                                browser.setInputUrl(event.nativeEvent.targetUrl);
+                            }
+                        }}
                     />
-                    <TouchableOpacity
-                        style={[styles.annotationToggle, { backgroundColor: theme.colors.surface }]}
-                        onPress={() => setShowAnnotations(!showAnnotations)}
-                    >
-                        <Ionicons
-                            name={showAnnotations ? "eye" : "eye-off"}
-                            size={20}
-                            color={showAnnotations ? theme.colors.primary : theme.colors.textSecondary}
-                        />
-                    </TouchableOpacity>
+                    <View style={styles.floatingButtons}>
+                        <TouchableOpacity
+                            style={[styles.floatingBtn, { backgroundColor: theme.colors.surface }]}
+                            onPress={() => setShowDensityPanel(!showDensityPanel)}
+                        >
+                            <Ionicons
+                                name="options"
+                                size={20}
+                                color={showDensityPanel ? theme.colors.primary : theme.colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                            style={[styles.floatingBtn, { backgroundColor: theme.colors.surface }]}
+                            onPress={() => setShowAnnotations(!showAnnotations)}
+                        >
+                            <Ionicons
+                                name={showAnnotations ? "eye" : "eye-off"}
+                                size={20}
+                                color={showAnnotations ? theme.colors.primary : theme.colors.textSecondary}
+                            />
+                        </TouchableOpacity>
+                    </View>
+
+                    {/* 标注密度面板 */}
+                    {showDensityPanel && (
+                        <View style={[styles.densityPanel, { backgroundColor: theme.colors.surface }]}>
+                            <View style={styles.densityHeader}>
+                                <Text style={[styles.densityTitle, { color: theme.colors.text }]}>标注设置</Text>
+                                <TouchableOpacity onPress={() => setShowDensityPanel(false)}>
+                                    <Ionicons name="close" size={20} color={theme.colors.textSecondary} />
+                                </TouchableOpacity>
+                            </View>
+
+                            <View style={styles.densityStats}>
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, { color: theme.colors.primary }]}>{highlightedCount}</Text>
+                                    <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>已标注</Text>
+                                </View>
+                                <View style={styles.statItem}>
+                                    <Text style={[styles.statValue, { color: theme.colors.text }]}>{annotationDensity}%</Text>
+                                    <Text style={[styles.statLabel, { color: theme.colors.textSecondary }]}>密度</Text>
+                                </View>
+                            </View>
+
+                            <View style={styles.thresholdSection}>
+                                <Text style={[styles.thresholdLabel, { color: theme.colors.textSecondary }]}>
+                                    词频阈值: {annotationThreshold}
+                                </Text>
+                                <View style={styles.thresholdButtons}>
+                                    <TouchableOpacity
+                                        style={[styles.thresholdBtn, { backgroundColor: theme.colors.background }]}
+                                        onPress={() => handleThresholdChange(Math.max(500, annotationThreshold - 500))}
+                                    >
+                                        <Text style={[styles.thresholdBtnText, { color: theme.colors.text }]}>-</Text>
+                                    </TouchableOpacity>
+                                    <Text style={[styles.thresholdValue, { color: theme.colors.text }]}>{annotationThreshold}</Text>
+                                    <TouchableOpacity
+                                        style={[styles.thresholdBtn, { backgroundColor: theme.colors.background }]}
+                                        onPress={() => handleThresholdChange(Math.min(10000, annotationThreshold + 500))}
+                                    >
+                                        <Text style={[styles.thresholdBtnText, { color: theme.colors.text }]}>+</Text>
+                                    </TouchableOpacity>
+                                </View>
+                            </View>
+
+                            {(() => {
+                                const suggestion = getDensitySuggestion();
+                                if (suggestion.action !== 'none') {
+                                    return (
+                                        <TouchableOpacity
+                                            style={[styles.suggestionBtn, { backgroundColor: theme.colors.primary + '20' }]}
+                                            onPress={() => {
+                                                if (suggestion.action === 'increase') {
+                                                    handleThresholdChange(annotationThreshold + 500);
+                                                } else {
+                                                    handleThresholdChange(Math.max(500, annotationThreshold - 500));
+                                                }
+                                            }}
+                                        >
+                                            <Ionicons name="information-circle" size={16} color={theme.colors.primary} />
+                                            <Text style={[styles.suggestionText, { color: theme.colors.primary }]}>
+                                                {suggestion.message}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                }
+                                return null;
+                            })()}
+                        </View>
+                    )}
                 </View>
             )}
 
@@ -1076,6 +965,13 @@ const styles = StyleSheet.create({
         marginLeft: 8,
         padding: 0,
     },
+    searchEngineButton: {
+        padding: 2,
+    },
+    searchEngineText: {
+        fontSize: 11,
+        fontWeight: '600',
+    },
     statusBar: {
         minHeight: 28,
         justifyContent: 'center',
@@ -1113,10 +1009,14 @@ const styles = StyleSheet.create({
     webView: {
         flex: 1,
     },
-    annotationToggle: {
+    floatingButtons: {
         position: 'absolute',
         top: 12,
         right: 12,
+        gap: 8,
+        zIndex: 100,
+    },
+    floatingBtn: {
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -1127,7 +1027,87 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.15,
         shadowRadius: 4,
         elevation: 4,
-        zIndex: 100,
+    },
+    densityPanel: {
+        position: 'absolute',
+        top: 60,
+        right: 12,
+        width: 200,
+        borderRadius: 12,
+        padding: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+        elevation: 8,
+        zIndex: 99,
+    },
+    densityHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    densityTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+    },
+    densityStats: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        marginBottom: 12,
+    },
+    statItem: {
+        alignItems: 'center',
+    },
+    statValue: {
+        fontSize: 20,
+        fontWeight: '700',
+    },
+    statLabel: {
+        fontSize: 11,
+        marginTop: 2,
+    },
+    thresholdSection: {
+        marginBottom: 12,
+    },
+    thresholdLabel: {
+        fontSize: 12,
+        marginBottom: 8,
+    },
+    thresholdButtons: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 16,
+    },
+    thresholdBtn: {
+        width: 32,
+        height: 32,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    thresholdBtnText: {
+        fontSize: 18,
+        fontWeight: '600',
+    },
+    thresholdValue: {
+        fontSize: 16,
+        fontWeight: '600',
+        minWidth: 50,
+        textAlign: 'center',
+    },
+    suggestionBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 8,
+        borderRadius: 8,
+        gap: 6,
+    },
+    suggestionText: {
+        fontSize: 12,
+        flex: 1,
     },
     loadingContainer: {
         position: 'absolute',

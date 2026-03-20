@@ -1,35 +1,38 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View, Platform } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { StyleSheet, View, Platform, ActivityIndicator } from 'react-native';
+import { NavigationContainer, NavigationState, PartialState } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Ionicons } from '@expo/vector-icons';
-import Animated, { FadeIn, SlideInRight } from 'react-native-reanimated';
+import Animated, { FadeIn } from 'react-native-reanimated';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Initialize i18n before any components that use it
 import './src/i18n';
 
 import { ThemeProvider, useTheme } from './src/contexts/ThemeContext';
 import { LanguageProvider, useLanguage } from './src/contexts/LanguageContext';
+import { BrowserProvider } from './src/contexts/BrowserContext';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { BrowserScreen } from './src/screens/BrowserScreen';
 import { VocabScreen } from './src/screens/VocabScreen';
 import { SentencesScreen } from './src/screens/SentencesScreen';
 import { StatsScreen } from './src/screens/StatsScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
+import { SubscriptionScreen } from './src/screens/SubscriptionScreen';
 import { WhitelistScreen } from './src/screens/WhitelistScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 import { ProficiencyTestScreen } from './src/screens/ProficiencyTestScreen';
 import { LoginScreen } from './src/screens/LoginScreen';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { Dictionary } from './src/services/dictionary';
 
 export type RootStackParamList = {
   Login: undefined;
   Main: undefined;
   Browser: undefined;
   Whitelist: undefined;
-  Settings: undefined;
   ProficiencyTest: undefined;
+  Subscription: undefined;
 };
 
 export type MainTabParamList = {
@@ -37,10 +40,13 @@ export type MainTabParamList = {
   Vocab: undefined;
   Sentences: undefined;
   Stats: undefined;
+  Profile: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
+
+const NAVIGATION_STATE_KEY = 'navigation_state';
 
 function MainTabNavigator() {
   const { theme } = useTheme();
@@ -54,16 +60,19 @@ function MainTabNavigator() {
 
           switch (route.name) {
             case 'Home':
-              iconName = focused ? 'scan' : 'scan-outline';
+              iconName = focused ? 'book' : 'book-outline';
               break;
             case 'Vocab':
-              iconName = focused ? 'book' : 'book-outline';
+              iconName = focused ? 'bookmark' : 'bookmark-outline';
               break;
             case 'Sentences':
               iconName = focused ? 'document-text' : 'document-text-outline';
               break;
             case 'Stats':
               iconName = focused ? 'stats-chart' : 'stats-chart-outline';
+              break;
+            case 'Profile':
+              iconName = focused ? 'person' : 'person-outline';
               break;
             default:
               iconName = 'help-circle';
@@ -116,6 +125,11 @@ function MainTabNavigator() {
         component={StatsScreen}
         options={{ title: t('tabs.stats') }}
       />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{ title: t('tabs.profile') }}
+      />
     </Tab.Navigator>
   );
 }
@@ -124,6 +138,45 @@ function AppContent() {
   const { theme } = useTheme();
   const { t } = useLanguage();
   const { isAuthenticated, isLoading } = useAuth();
+  const [isNavigationReady, setIsNavigationReady] = useState(false);
+  const [isDictionaryReady, setIsDictionaryReady] = useState(false);
+  const [initialState, setInitialState] = useState<PartialState<NavigationState> | undefined>();
+
+  useEffect(() => {
+    const initApp = async () => {
+      try {
+        await Dictionary.initialize();
+        setIsDictionaryReady(true);
+      } catch (error) {
+        console.error('词典初始化失败:', error);
+        setIsDictionaryReady(true);
+      }
+    };
+    initApp();
+  }, []);
+
+  useEffect(() => {
+    const loadNavigationState = async () => {
+      try {
+        const savedState = await AsyncStorage.getItem(NAVIGATION_STATE_KEY);
+        if (savedState) {
+          setInitialState(JSON.parse(savedState));
+        }
+      } catch (error) {
+        console.error('加载导航状态失败:', error);
+      } finally {
+        setIsNavigationReady(true);
+      }
+    };
+
+    loadNavigationState();
+  }, []);
+
+  const onStateChange = useCallback((state: NavigationState | undefined) => {
+    if (state) {
+      AsyncStorage.setItem(NAVIGATION_STATE_KEY, JSON.stringify(state)).catch(() => { });
+    }
+  }, []);
 
   const navigationTheme = {
     dark: theme.isDark,
@@ -143,16 +196,21 @@ function AppContent() {
     },
   };
 
-  if (isLoading) {
+  if (isLoading || !isNavigationReady || !isDictionaryReady) {
     return (
       <View style={[styles.container, { backgroundColor: theme.colors.background, alignItems: 'center', justifyContent: 'center' }]}>
         <StatusBar style={theme.isDark ? 'light' : 'dark'} />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
 
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer
+      theme={navigationTheme}
+      initialState={initialState}
+      onStateChange={onStateChange}
+    >
       <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
         <Stack.Navigator
           initialRouteName={isAuthenticated ? "Main" : "Login"}
@@ -199,25 +257,15 @@ function AppContent() {
               },
             }}
           />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{
-              title: t('settings.title'),
-              presentation: 'modal',
-              animation: 'slide_from_bottom',
-              headerStyle: {
-                backgroundColor: theme.colors.surface,
-              },
-              headerTintColor: theme.colors.text,
-              headerTitleStyle: {
-                fontWeight: '600',
-              },
-            }}
-          />
+
           <Stack.Screen
             name="ProficiencyTest"
             component={ProficiencyTestScreen}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen
+            name="Subscription"
+            component={SubscriptionScreen}
             options={{ headerShown: false }}
           />
         </Stack.Navigator>
@@ -232,7 +280,9 @@ export default function App() {
     <ThemeProvider>
       <LanguageProvider>
         <AuthProvider>
-          <AppContent />
+          <BrowserProvider>
+            <AppContent />
+          </BrowserProvider>
         </AuthProvider>
       </LanguageProvider>
     </ThemeProvider>

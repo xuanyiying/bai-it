@@ -2,7 +2,7 @@
  * Options 页面逻辑测试
  *
  * 覆盖：
- * 1. 多 Provider 配置类型 (resolveLLMConfig, migrateLLMConfig)
+ * 1. 多 Provider 配置类型 (resolveAIConfig, migrateAIConfig)
  * 2. useDashboardData 聚合逻辑
  * 3. useSentences 筛选逻辑
  * 4. useReviewData 选句逻辑

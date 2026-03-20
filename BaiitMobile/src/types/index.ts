@@ -1,51 +1,47 @@
-// ========== LLM 配置 ==========
+// ========== AI 配置 ==========
 
-/** llm-adapter 内部使用的扁平格式（从 provider 推导） */
-export interface LLMConfig {
+/** AI 配置 */
+export interface AIConfig {
   format: "gemini" | "openai-compatible";
   apiKey: string;
   baseUrl: string;
   model: string;
 }
 
-/** 5 种 Provider */
-export type ProviderKey = "gemini" | "chatgpt" | "deepseek" | "qwen" | "kimi";
-
-/** 单个 Provider 的存储数据 */
-export interface ProviderConfig {
+/** 用户 AI 配置 */
+export interface UserAIConfig {
   apiKey: string;
+  baseUrl: string;
   model: string;
 }
 
-/** 多 Provider 存储结构 */
-export interface LLMMultiConfig {
-  activeProvider: ProviderKey;
-  providers: Record<ProviderKey, ProviderConfig>;
+/** 内置 AI 配置（从环境变量读取） */
+export interface BuiltInAIConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
+/** AI 配置存储结构 */
+export interface AIStorageConfig {
+  useBuiltIn: boolean;  // 是否使用内置配置
+  userConfig?: UserAIConfig;  // 用户自定义配置
 }
 
 // ========== 插件配置 ==========
 
 export interface BaitConfig {
-  llm: LLMMultiConfig;
-  sensitivity: number; // 2-5，细读模式复杂度阈值
-  scanThreshold: "short" | "medium" | "long"; // 扫读模式最小词数阈值
-  chunkGranularity: "coarse" | "medium" | "fine"; // 拆分颗粒度
-  chunkIntensity: number; // 1-5，渲染力度
-  disabledSites: string[]; // hostname 黑名单
+  AI: AIStorageConfig;
+  sensitivity: number;
+  scanThreshold: "short" | "medium" | "long";
+  chunkGranularity: "coarse" | "medium" | "fine";
+  chunkIntensity: number;
+  disabledSites: string[];
 }
 
-export const DEFAULT_PROVIDERS: Record<ProviderKey, ProviderConfig> = {
-  gemini: { apiKey: "", model: "gemini-3.1-flash-lite-preview" },
-  chatgpt: { apiKey: "", model: "gpt-4.1-mini" },
-  deepseek: { apiKey: "", model: "deepseek-chat" },
-  qwen: { apiKey: "", model: "qwen3-flash" },
-  kimi: { apiKey: "", model: "kimi-k2.5" },
-};
-
 export const DEFAULT_CONFIG: BaitConfig = {
-  llm: {
-    activeProvider: "gemini",
-    providers: { ...DEFAULT_PROVIDERS },
+  AI: {
+    useBuiltIn: true,
   },
   sensitivity: 3,
   scanThreshold: "medium",
@@ -54,43 +50,38 @@ export const DEFAULT_CONFIG: BaitConfig = {
   disabledSites: [],
 };
 
-/** Provider 元数据（format / baseUrl 是常量，从 provider 名推导） */
-export const PROVIDER_META: Record<ProviderKey, { format: LLMConfig["format"]; baseUrl: string; label: string }> = {
-  gemini: { format: "gemini", baseUrl: "", label: "Gemini" },
-  chatgpt: { format: "openai-compatible", baseUrl: "https://api.openai.com", label: "ChatGPT" },
-  deepseek: { format: "openai-compatible", baseUrl: "https://api.deepseek.com", label: "DeepSeek" },
-  qwen: { format: "openai-compatible", baseUrl: "https://dashscope.aliyuncs.com/compatible-mode", label: "Qwen" },
-  kimi: { format: "openai-compatible", baseUrl: "https://api.moonshot.cn", label: "Kimi" },
-};
+/** 内置 AI 配置（从环境变量读取，不硬编码） */
+export const BUILT_IN_AI_CONFIG: BuiltInAIConfig | null = null;
 
-/** 从多 Provider 配置中解析出 LLMConfig（给 llm-adapter 用） */
-export function resolveLLMConfig(multi: LLMMultiConfig): LLMConfig {
-  const provider = multi.activeProvider;
-  const pc = multi.providers[provider];
-  const meta = PROVIDER_META[provider];
-  return {
-    format: meta.format,
-    apiKey: pc.apiKey,
-    baseUrl: meta.baseUrl,
-    model: pc.model,
-  };
+/** 解析最终 AI 配置 */
+export function resolveAIConfig(config: AIStorageConfig): AIConfig | null {
+  if (config.useBuiltIn && BUILT_IN_AI_CONFIG) {
+    return {
+      format: "openai-compatible",
+      apiKey: BUILT_IN_AI_CONFIG.apiKey,
+      baseUrl: BUILT_IN_AI_CONFIG.baseUrl,
+      model: BUILT_IN_AI_CONFIG.model,
+    };
+  }
+
+  if (config.userConfig?.apiKey) {
+    return {
+      format: "openai-compatible",
+      apiKey: config.userConfig.apiKey,
+      baseUrl: config.userConfig.baseUrl,
+      model: config.userConfig.model,
+    };
+  }
+
+  return null;
 }
 
-/** 旧格式升级到新格式（向后兼容） */
-export function migrateLLMConfig(raw: unknown): LLMMultiConfig {
-  if (raw && typeof raw === "object" && "activeProvider" in (raw as Record<string, unknown>)) {
-    return raw as LLMMultiConfig;
+/** 检查是否配置了有效的 AI */
+export function hasValidAIConfig(config: AIStorageConfig): boolean {
+  if (config.useBuiltIn && BUILT_IN_AI_CONFIG?.apiKey) {
+    return true;
   }
-  // 旧格式: { format, apiKey, baseUrl, model }
-  const old = raw as { format?: string; apiKey?: string; model?: string } | undefined;
-  const providers = { ...DEFAULT_PROVIDERS };
-  if (old?.apiKey) {
-    // 猜测旧 provider
-    const guessProvider: ProviderKey = old.format === "gemini" ? "gemini" : "chatgpt";
-    providers[guessProvider] = { apiKey: old.apiKey, model: old.model || DEFAULT_PROVIDERS[guessProvider].model };
-    return { activeProvider: guessProvider, providers };
-  }
-  return { activeProvider: "gemini", providers };
+  return !!config.userConfig?.apiKey;
 }
 
 // ========== Content Script ↔ Service Worker 消息 ==========
@@ -111,306 +102,239 @@ export type Message =
 export type BackgroundMessage =
   | { type: "activate" }
   | { type: "deactivate" }
-  | { type: "pause" }
-  | { type: "resume" }
-  | { type: "sentenceAnalyzed"; pendingId: string; learningRecord: LearningRecord }
-  | { type: "sentenceAnalysisFailed"; pendingId: string; error: string };
+  | { type: "chunkResult"; results: ChunkResult[] }
+  | { type: "hasApiKey"; value: boolean }
+  | { type: "config"; config: BaitConfig }
+  | { type: "siteStatus"; hostname: string; isDisabled: boolean }
+  | { type: "tabState"; isPaused: boolean; isDisabled: boolean }
+  | { type: "sentenceSaved"; success: boolean };
 
-// ========== 分块结果 ==========
+// ========== AI 分析结果 ==========
 
 export interface ChunkResult {
+  index: number;
   original: string;
   chunked: string;
-  isSimple: boolean;
-  newWords: { word: string; definition: string }[];
-  sentenceAnalysis?: string;
-  expressionTips?: string;
+  is_simple: boolean;
+  new_words: { word: string; definition: string }[];
 }
-
-// ========== 缓存 ==========
-
-export interface CacheEntry {
-  hash: string;
-  result: ChunkResult;
-  timestamp: number;
-}
-
-export const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 天
-
-// ========== LLM 完整分析结果 ==========
 
 export interface FullAnalysisResult {
   chunked: string;
-  pattern_key: string;
-  sentence_analysis: string;
-  expression_tips: string;
+  is_simple: boolean;
   new_words: { word: string; definition: string }[];
-  is_worth_practicing: boolean;
+  structure?: string;
+  sentence_analysis?: string;
+  expression_tips?: string;
+  pattern_key?: string;
+  is_worth_practicing?: boolean;
 }
 
-// ========== IndexedDB 数据层（10 张表） ==========
+// ========== 词汇相关类型 ==========
 
-/** 生词状态 */
-export type VocabStatus = "new" | "learning" | "mastered";
-
-/** vocab — 生词表 */
-export interface VocabRecord {
-  id: string; // UUID
-  word: string;
-  status: VocabStatus;
-  phonetic?: string;
-  definition?: string; // 释义（含行业义项）
-  encounter_count: number; // 遭遇次数
-  first_seen_at: number;
-  mastered_at?: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** vocab_contexts — 生词出处（每次遭遇记一条） */
-export interface VocabContextRecord {
-  id: string; // UUID
-  vocab_id: string;
-  sentence: string; // 出现的原句
-  context_definition: string; // 语境释义
-  source_url: string;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** 句式类型 key（与 PRD 对齐） */
-export type PatternKey =
-  | "insertion"
-  | "background_first"
-  | "nested"
-  | "long_list"
-  | "inverted"
-  | "long_subject"
-  | "omission"
-  | "contrast"
-  | "condition"
-  | "long_modifier"
-  | "other";
-
-/** patterns — 句式类型 */
-export interface PatternRecord {
-  id: string; // UUID
-  key: PatternKey;
-  count: number; // 遇到次数
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** pattern_examples — 句式实例 */
-export interface PatternExampleRecord {
-  id: string; // UUID
-  pattern_id: string;
-  sentence: string;
-  chunked: string;
-  explanation?: string;
-  source_url?: string;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** learning_records — 阅读记录（只记 LLM 处理过的复杂句子） */
-export interface LearningRecord {
-  id: string; // UUID
-  sentence: string;
-  chunked: string;
-  sentence_analysis?: string; // 句式讲解
-  expression_tips?: string; // 学会表达
-  pattern_key?: PatternKey;
-  new_words: { word: string; definition: string }[];
-  source_url?: string;
-  llm_provider?: string;
-  tokens_used?: number;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** settings — 键值对设置（学习系统用） */
-export interface SettingsRecord {
-  key: string; // 主键
-  value: unknown;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** weekly_reports — 周报缓存 */
-export interface WeeklyReportRecord {
-  id: string; // UUID
-  week_start: string; // ISO date，如 "2026-02-23"
-  content: string; // LLM 生成的周报文本
-  stats: {
-    total_sentences: number;
-    total_new_words: number;
-    pattern_distribution: Record<string, number>;
-    top_words: { word: string; count: number }[];
-  };
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** review_items — 间隔重复队列（SM-2 算法） */
-export interface ReviewItemRecord {
-  id: string; // UUID
-  type: "sentence" | "word";
-  reference_id: string; // 关联 learning_records.id 或 vocab.id
-  ease_factor: number; // SM-2 难度系数，默认 2.5
-  interval: number; // 当前间隔（天）
-  repetitions: number; // 连续正确次数
-  next_review_at: number; // 下次复习时间戳
-  last_reviewed_at?: number;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** wallpaper_records — 壁纸生成记录 */
-export interface WallpaperRecord {
-  id: string; // UUID
-  sentence: string;
-  image_data?: string; // base64 或 blob URL
-  style?: string;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-/** pending_sentences — 待分析句子（浏览时静默采集） */
-export interface PendingSentenceRecord {
-  id: string; // UUID
-  text: string;
-  source_url: string;
-  source_hostname: string;
-  manual: boolean;
-  new_words: string[]; // 只存词，不存释义（释义后续由 LLM 给）
-  analyzed: boolean;
-  created_at: number;
-  updated_at: number;
-  is_dirty: boolean;
-}
-
-// ========== Mobile App 类型 ==========
-
-/** 单词信息 */
-export interface WordInfo {
-  word: string;
-  isNew: boolean;
-  definition?: string;
-}
-
-/** 扫描结果 */
-export interface ScanResult {
-  id: string;
-  text: string;
-  words: WordInfo[];
-  timestamp: number;
-  sourceApp?: string;
-}
-
-/** 生词状态 */
 export type MobileVocabStatus = 'new' | 'learning' | 'mastered';
 
-/** 生词记录 (Mobile App 使用 camelCase) */
 export interface MobileVocabRecord {
   id: string;
   word: string;
-  status: MobileVocabStatus;
   phonetic?: string;
-  definition?: string;
-  encounterCount: number;
-  firstSeenAt: number;
-  masteredAt?: number;
-  updatedAt: number;
+  definition: string;
+  status: MobileVocabStatus;
+  addedAt: string;
+  lastReviewed?: string;
+  reviewCount: number;
+  sourceUrl?: string;
+  encounterCount?: number;
+  firstSeenAt?: string;
+  updatedAt?: string;
+  masteredAt?: string;
 }
 
-/** 生词语境记录 (Mobile App 使用 camelCase) */
 export interface MobileVocabContextRecord {
   id: string;
   vocabId: string;
   sentence: string;
-  contextDefinition: string;
-  sourceApp?: string;
+  translation?: string;
   sourceUrl?: string;
-  createdAt: number;
+  createdAt: string;
 }
 
-/** 收藏的句子 (Mobile App 使用 camelCase) */
+// ========== 句子相关类型 ==========
+
 export interface MobileSavedSentence {
   id: string;
   text: string;
   translation?: string;
-  words: string[];
-  sourceApp?: string;
   sourceUrl?: string;
+  sourceHostname?: string;
+  sourceApp?: string;
+  savedAt: string;
+  createdAt: string;
+  updatedAt?: string;
   isAnalyzed: boolean;
-  analysisResult?: MobileSentenceAnalysis;
-  createdAt: number;
-  updatedAt: number;
+  newWords: string[];
+  words: string[];
+  analysisResult?: {
+    chunked?: string;
+    structure?: string;
+    sentenceAnalysis?: string;
+    expressionTips?: string;
+    newWords?: { word: string; definition: string }[];
+  };
 }
 
-/** 句子分析结果 (Mobile App 使用 camelCase) */
 export interface MobileSentenceAnalysis {
+  id: string;
+  sentenceId: string;
   chunked: string;
-  sentenceAnalysis: string;
-  expressionTips: string;
+  structure?: string;
+  sentence_analysis?: string;
+  expression_tips?: string;
   newWords: { word: string; definition: string }[];
+  analyzedAt: string;
 }
 
-/** 学习记录 (Mobile App 使用 camelCase) */
+// ========== 学习记录类型 ==========
+
 export interface MobileLearningRecord {
   id: string;
-  date: string; // YYYY-MM-DD
-  newWords: number;
-  reviewedWords: number;
-  masteredWords: number;
-  sentencesCollected: number;
-  studyTimeMinutes: number;
+  date: string;
+  wordsLearned: number;
+  wordsReviewed: number;
+  sentencesRead: number;
+  timeSpent: number; // 分钟
+  newWords?: number;
+  reviewedWords?: number;
+  masteredWords?: number;
+  sentencesCollected?: number;
+  studyTimeMinutes?: number;
 }
 
-/** 复习项目（SM-2 算法）(Mobile App 使用 camelCase) */
 export interface MobileReviewItem {
   id: string;
-  type: 'word' | 'sentence';
-  referenceId: string;
-  easeFactor: number;
-  interval: number;
-  repetitions: number;
-  nextReviewAt: number;
-  lastReviewedAt?: number;
+  vocabId: string;
+  nextReview: string;
+  nextReviewAt?: string;
+  interval: number; // 间隔天数
+  easeFactor: number; // 难度系数
+  repetitions?: number;
+  lastReviewedAt?: string;
 }
 
-/** 应用统计 (Mobile App 使用 camelCase) */
+// ========== 应用统计类型 ==========
+
 export interface MobileAppStats {
   totalWords: number;
   masteredWords: number;
   learningWords: number;
-  newWords: number;
-  totalSentences: number;
-  currentStreak: number;
-  longestStreak: number;
+  savedSentences: number;
+  analyzedSentences: number;
+  streakDays: number;
   lastStudyDate?: string;
+  totalStudyTime: number; // 分钟
+  currentStreak?: number;
+  longestStreak?: number;
+  newWords?: number;
+  totalSentences?: number;
 }
 
-// ========== Scan Rules 类型 ==========
+// ========== 缓存相关类型 ==========
 
-/** 拆分颗粒度 */
-export type Granularity = "coarse" | "medium" | "fine";
+export interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+  expiresAt: number;
+}
 
-/** 扫描分块 */
+export const CACHE_TTL = {
+  VOCAB: 24 * 60 * 60 * 1000, // 1天
+  SENTENCE: 7 * 24 * 60 * 60 * 1000, // 7天
+  ANALYSIS: 30 * 24 * 60 * 60 * 1000, // 30天
+};
+
+// ========== 扫描规则类型 ==========
+
+export type Granularity = 'coarse' | 'medium' | 'fine';
+
 export interface ScanChunk {
+  id?: string;
   text: string;
-  level: number; // 0 = 主句, 1 = 从句/修饰
+  startIndex?: number;
+  endIndex?: number;
+  level?: number;
 }
 
-/** 扫描分块结果 */
 export interface ScanChunkResult {
-  chunks: ScanChunk[];
-  needsLLM: boolean;
+  chunk?: ScanChunk;
+  chunks?: ScanChunk[];
+  difficulty?: number;
+  shouldAnnotate?: boolean;
+  needsAI?: boolean;
+}
+
+// ========== 单词信息类型 ==========
+
+export interface WordInfo {
+  word: string;
+  phonetic?: string;
+  definition: string;
+  difficulty: number;
+  frequency: number;
+  isNew?: boolean;
+}
+
+// ========== 数据库记录类型（兼容旧代码） ==========
+
+export type VocabStatus = MobileVocabStatus;
+export type VocabRecord = MobileVocabRecord;
+export type VocabContextRecord = MobileVocabContextRecord;
+export type SavedSentence = MobileSavedSentence;
+export type SentenceAnalysis = MobileSentenceAnalysis;
+export type LearningRecord = MobileLearningRecord;
+export type ReviewItem = MobileReviewItem;
+export type AppStats = MobileAppStats;
+
+// ========== 旧版兼容类型 ==========
+
+/** @deprecated 使用 AIStorageConfig 替代 */
+export type AIMultiConfig = AIStorageConfig;
+
+/** @deprecated 使用 SavedSentence 替代 */
+export type MobileSavedSentenceRecord = MobileSavedSentence;
+
+/** @deprecated 使用 MobileSentenceAnalysis 替代 */
+export type SentenceAnalysisRecord = MobileSentenceAnalysis;
+
+// ========== utils/db.ts 兼容类型 ==========
+
+/** @deprecated 使用 VocabRecord 替代 */
+export type PatternRecord = VocabRecord;
+
+/** @deprecated 使用 VocabContextRecord 替代 */
+export type PatternExampleRecord = VocabContextRecord;
+
+/** @deprecated 使用 BaitConfig 替代 */
+export type SettingsRecord = BaitConfig;
+
+/** @deprecated 使用 LearningRecord 替代 */
+export type WeeklyReportRecord = LearningRecord;
+
+/** @deprecated 使用 ReviewItem 替代 */
+export type ReviewItemRecord = ReviewItem;
+
+/** @deprecated 使用 VocabRecord 替代 */
+export type WallpaperRecord = VocabRecord;
+
+/** @deprecated 使用 SavedSentence 替代 */
+export type PendingSentenceRecord = SavedSentence;
+
+// ========== 扫描结果类型 ==========
+
+export interface ScanResult {
+  id: string;
+  text: string;
+  words: WordInfo[];
+  sentences: string[];
+  timestamp: number;
+  source?: string;
 }

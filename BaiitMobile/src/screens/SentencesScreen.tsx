@@ -19,7 +19,7 @@ import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Input } from '../components/ui/Input';
+import { SearchBar } from '../components/ui/SearchBar';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 
@@ -98,17 +98,17 @@ export const SentencesScreen: React.FC = () => {
         <Text style={[styles.sentenceText, { color: theme.colors.text }]} numberOfLines={3}>
           {item.text}
         </Text>
-        
+
         {item.translation && (
           <Text style={[styles.translation, { color: theme.colors.textSecondary }]} numberOfLines={2}>
             {item.translation}
           </Text>
         )}
-        
+
         <View style={styles.sentenceFooter}>
           <View style={styles.wordsContainer}>
             {item.words.slice(0, 5).map((word, index) => (
-              <Badge key={`${item.id}-word-${index}`} label={word} variant="info" size="sm" />
+              <Badge key={`${item.id}-word-${index}-${Date.now()}`} label={word} variant="info" size="sm" />
             ))}
             {item.words.length > 5 && (
               <Text style={[styles.moreWords, { color: theme.colors.textSecondary }]}>
@@ -116,7 +116,7 @@ export const SentencesScreen: React.FC = () => {
               </Text>
             )}
           </View>
-          
+
           <Text style={[styles.date, { color: theme.colors.textSecondary }]}>
             {new Date(item.createdAt).toLocaleDateString()}
           </Text>
@@ -144,13 +144,11 @@ export const SentencesScreen: React.FC = () => {
         </Text>
       </View>
 
-      <View style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}>
-        <Input
+      <View style={styles.searchContainer}>
+        <SearchBar
           placeholder={t('sentences.searchPlaceholder')}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon="search-outline"
-          variant="filled"
         />
       </View>
 
@@ -242,8 +240,8 @@ export const SentencesScreen: React.FC = () => {
                       <Text style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}>
                         {t('sentences.newWords')}
                       </Text>
-                      {selectedSentence.analysisResult.newWords.map((word, index) => (
-                        <Card key={`newword-${word.word}-${index}`} variant="default" padding="sm" style={styles.newWordItem}>
+                      {selectedSentence.analysisResult.newWords?.map((word, index) => (
+                        <Card key={`newword-${word.word}-${index}-${Date.now()}`} variant="default" padding="sm" style={styles.newWordItem}>
                           <Text style={[styles.newWord, { color: theme.colors.primary }]}>
                             {word.word}
                           </Text>
@@ -262,7 +260,7 @@ export const SentencesScreen: React.FC = () => {
                   </Text>
                   <View style={styles.wordsList}>
                     {selectedSentence.words.map((word, index) => (
-                      <Badge key={`${selectedSentence.id}-badge-${index}`} label={word} variant="default" />
+                      <Badge key={`${selectedSentence.id}-badge-${index}-${Date.now()}`} label={word} variant="default" />
                     ))}
                   </View>
                 </View>
@@ -303,7 +301,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   searchContainer: {
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   listContainer: {
     padding: 12,

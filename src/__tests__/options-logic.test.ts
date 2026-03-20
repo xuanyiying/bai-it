@@ -2,7 +2,7 @@
  * Options 页面逻辑测试
  *
  * 覆盖：
- * 1. 多 Provider 配置类型 (resolveLLMConfig, migrateLLMConfig)
+ * 1. 多 Provider 配置类型 (resolveAIConfig, migrateAIConfig)
  * 2. useDashboardData 聚合逻辑
  * 3. useSentences 筛选逻辑
  * 4. useReviewData 选句逻辑
@@ -12,14 +12,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import "fake-indexeddb/auto";
 import {
-  resolveLLMConfig,
-  migrateLLMConfig,
+  resolveAIConfig,
+  migrateAIConfig,
   DEFAULT_PROVIDERS,
   PROVIDER_META,
 } from "../shared/types.ts";
 import type {
-  LLMMultiConfig,
-  LLMConfig,
+  AIMultiConfig,
+  AIConfig,
   ProviderKey,
   LearningRecord,
   PatternKey,
@@ -34,18 +34,18 @@ import {
 } from "../shared/db.ts";
 import { PATTERN_LABELS, PROVIDER_INFO } from "../options/constants.ts";
 
-// ========== resolveLLMConfig ==========
+// ========== resolveAIConfig ==========
 
-describe("resolveLLMConfig", () => {
+describe("resolveAIConfig", () => {
   it("resolves Gemini provider correctly", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "gemini",
       providers: {
         ...DEFAULT_PROVIDERS,
         gemini: { apiKey: "test-key", model: "gemini-2.0-flash" },
       },
     };
-    const result = resolveLLMConfig(multi);
+    const result = resolveAIConfig(multi);
     expect(result.format).toBe("gemini");
     expect(result.apiKey).toBe("test-key");
     expect(result.baseUrl).toBe("");
@@ -53,14 +53,14 @@ describe("resolveLLMConfig", () => {
   });
 
   it("resolves ChatGPT provider correctly", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "chatgpt",
       providers: {
         ...DEFAULT_PROVIDERS,
         chatgpt: { apiKey: "sk-xxx", model: "gpt-4o-mini" },
       },
     };
-    const result = resolveLLMConfig(multi);
+    const result = resolveAIConfig(multi);
     expect(result.format).toBe("openai-compatible");
     expect(result.apiKey).toBe("sk-xxx");
     expect(result.baseUrl).toBe("https://api.openai.com");
@@ -68,64 +68,64 @@ describe("resolveLLMConfig", () => {
   });
 
   it("resolves DeepSeek provider correctly", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "deepseek",
       providers: {
         ...DEFAULT_PROVIDERS,
         deepseek: { apiKey: "ds-key", model: "deepseek-chat" },
       },
     };
-    const result = resolveLLMConfig(multi);
+    const result = resolveAIConfig(multi);
     expect(result.format).toBe("openai-compatible");
     expect(result.baseUrl).toBe("https://api.deepseek.com");
   });
 
   it("resolves Qwen provider correctly", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "qwen",
       providers: {
         ...DEFAULT_PROVIDERS,
         qwen: { apiKey: "qwen-key", model: "qwen-turbo" },
       },
     };
-    const result = resolveLLMConfig(multi);
+    const result = resolveAIConfig(multi);
     expect(result.format).toBe("openai-compatible");
     expect(result.baseUrl).toBe("https://dashscope.aliyuncs.com/compatible-mode");
   });
 
   it("resolves Kimi provider correctly", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "kimi",
       providers: {
         ...DEFAULT_PROVIDERS,
         kimi: { apiKey: "kimi-key", model: "moonshot-v1-8k" },
       },
     };
-    const result = resolveLLMConfig(multi);
+    const result = resolveAIConfig(multi);
     expect(result.format).toBe("openai-compatible");
     expect(result.baseUrl).toBe("https://api.moonshot.cn");
   });
 });
 
-// ========== migrateLLMConfig ==========
+// ========== migrateAIConfig ==========
 
-describe("migrateLLMConfig", () => {
+describe("migrateAIConfig", () => {
   it("passes through new format unchanged", () => {
-    const multi: LLMMultiConfig = {
+    const multi: AIMultiConfig = {
       activeProvider: "chatgpt",
       providers: {
         ...DEFAULT_PROVIDERS,
         chatgpt: { apiKey: "sk-xxx", model: "gpt-4o" },
       },
     };
-    const result = migrateLLMConfig(multi);
+    const result = migrateAIConfig(multi);
     expect(result.activeProvider).toBe("chatgpt");
     expect(result.providers.chatgpt.apiKey).toBe("sk-xxx");
   });
 
   it("migrates old Gemini format", () => {
     const old = { format: "gemini", apiKey: "old-key", baseUrl: "", model: "gemini-2.0-flash" };
-    const result = migrateLLMConfig(old);
+    const result = migrateAIConfig(old);
     expect(result.activeProvider).toBe("gemini");
     expect(result.providers.gemini.apiKey).toBe("old-key");
     expect(result.providers.gemini.model).toBe("gemini-2.0-flash");
@@ -133,19 +133,19 @@ describe("migrateLLMConfig", () => {
 
   it("migrates old OpenAI format", () => {
     const old = { format: "openai-compatible", apiKey: "sk-old", baseUrl: "https://api.openai.com", model: "gpt-4o-mini" };
-    const result = migrateLLMConfig(old);
+    const result = migrateAIConfig(old);
     expect(result.activeProvider).toBe("chatgpt");
     expect(result.providers.chatgpt.apiKey).toBe("sk-old");
   });
 
   it("handles undefined/null gracefully", () => {
-    const result = migrateLLMConfig(undefined);
+    const result = migrateAIConfig(undefined);
     expect(result.activeProvider).toBe("gemini");
     expect(result.providers.gemini.apiKey).toBe("");
   });
 
   it("handles empty object gracefully", () => {
-    const result = migrateLLMConfig({});
+    const result = migrateAIConfig({});
     expect(result.activeProvider).toBe("gemini");
   });
 });

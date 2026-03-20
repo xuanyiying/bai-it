@@ -3,7 +3,7 @@
  *
  * 词汇源：
  * 1. 通用离线词典（ECDICT 31K 词条）— 基础释义
- * 2. LLM 语境化释义 — 仅在调 LLM 时获得
+ * 2. AI 语境化释义 — 仅在调 AI 时获得
  *
  * 过滤规则：
  * - 常用词（ECDICT BNC/FRQ ≤ 5000）不标注
@@ -118,7 +118,7 @@ export function getStemCandidates(word: string): string[] {
   }
 
   if (w.endsWith("ses") || w.endsWith("xes") || w.endsWith("zes") ||
-      w.endsWith("ches") || w.endsWith("shes")) {
+    w.endsWith("ches") || w.endsWith("shes")) {
     candidates.push(w.slice(0, -2));
   } else if (w.endsWith("ies") && w.length > 4) {
     candidates.push(w.slice(0, -3) + "y");
@@ -222,7 +222,7 @@ export function resetAll(): void {
 
 // ========== Mobile App 简化接口 ==========
 
-import { WordInfo } from '../types';  
+import { WordInfo } from '../types';
 
 /**
  * 解析句子为单词数组（移动端简化版）
@@ -243,6 +243,12 @@ export function annotateWordsMobile(words: string[]): WordInfo[] {
   return words.map(word => {
     const lower = word.toLowerCase();
     const isNew = !shouldSkipWord(word) && !isCommonWord(word);
-    return { word: lower, isNew };
+    return {
+      word: lower,
+      isNew,
+      definition: '',
+      difficulty: isNew ? 4 : 1,
+      frequency: 0,
+    };
   });
 }

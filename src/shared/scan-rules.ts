@@ -13,7 +13,7 @@
  * 设计原则：
  * - 即时完成（< 1ms），零 API 成本
  * - 宁可多拆不漏拆（扫读场景，快速理解优先）
- * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 LLM
+ * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 AI
  */
 
 import { Lexer as PosLexer, Tagger as PosTagger } from "pos";
@@ -29,7 +29,7 @@ export interface ScanChunk {
 
 export interface ScanChunkResult {
   chunks: ScanChunk[];
-  needsLLM: boolean;
+  needsAI: boolean;
 }
 
 // ========== 长度阈值 ==========
@@ -435,8 +435,8 @@ function splitAtBoundaries(
         }
         // 不定式短语：TO + 动词（POS 辅助）
         else if (tags && tags[i] === "TO" &&
-                 i + 1 < words.length && tags[i + 1]?.startsWith("VB") &&
-                 remaining >= 4) {
+          i + 1 < words.length && tags[i + 1]?.startsWith("VB") &&
+          remaining >= 4) {
           shouldSplit = true;
           nextLevel = Math.min(currentLevel + 1, 5);
         }
@@ -489,7 +489,7 @@ function splitAtBoundaries(
  * @param sentence 要拆分的句子
  * @param threshold 长度阈值 ("short" | "medium" | "long")
  * @param granularity 拆分颗粒度 ("coarse" | "medium" | "fine")
- * @returns 拆分结果，包含分块和是否需要 LLM 降级
+ * @returns 拆分结果，包含分块和是否需要 AI 降级
  */
 export function scanSplit(
   sentence: string,
@@ -502,7 +502,7 @@ export function scanSplit(
 
   // 太短不拆
   if (words.length < minWords) {
-    return { chunks: [{ text: trimmed, level: 0 }], needsLLM: false };
+    return { chunks: [{ text: trimmed, level: 0 }], needsAI: false };
   }
 
   // POS 标注（失败时为 null，优雅降级）
@@ -513,17 +513,17 @@ export function scanSplit(
 
   // 本地拆分成功 → 直接用
   if (chunks.length > 1) {
-    return { chunks, needsLLM: false };
+    return { chunks, needsAI: false };
   }
 
-  // 本地拆不动 + 复杂句（3+ 从属标记）→ 降级 LLM
+  // 本地拆不动 + 复杂句（3+ 从属标记）→ 降级 AI
   const markerCount = countSubordinateMarkers(words);
   if (markerCount >= 3) {
-    return { chunks: [{ text: trimmed, level: 0 }], needsLLM: true };
+    return { chunks: [{ text: trimmed, level: 0 }], needsAI: true };
   }
 
   // 本地拆不动 + 不复杂 → 保持原样
-  return { chunks: [{ text: trimmed, level: 0 }], needsLLM: false };
+  return { chunks: [{ text: trimmed, level: 0 }], needsAI: false };
 }
 
 /**

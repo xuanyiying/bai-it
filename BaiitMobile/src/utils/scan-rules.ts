@@ -12,7 +12,7 @@
  * 设计原则：
  * - 即时完成（< 1ms），零 API 成本
  * - 宁可多拆不漏拆（扫读场景，快速理解优先）
- * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 LLM
+ * - 复杂句（3+ 从句标记 + 本地拆不动）降级给 AI
  */
 
 import { Granularity, ScanChunk, ScanChunkResult } from '../types';
@@ -274,7 +274,7 @@ function splitAtBoundaries(sentence: string, granularity: Granularity = "medium"
  * @param sentence 要拆分的句子
  * @param threshold 长度阈值 ("short" | "medium" | "long")
  * @param granularity 拆分颗粒度 ("coarse" | "medium" | "fine")
- * @returns 拆分结果，包含分块和是否需要 LLM 降级
+ * @returns 拆分结果，包含分块和是否需要 AI 降级
  */
 export function scanSplit(
   sentence: string,
@@ -287,7 +287,7 @@ export function scanSplit(
 
   // 太短不拆
   if (words.length < minWords) {
-    return { chunks: [{ text: trimmed, level: 0 }], needsLLM: false };
+    return { chunks: [{ text: trimmed, level: 0 }], needsAI: false };
   }
 
   // 先尝试本地拆分
@@ -295,17 +295,17 @@ export function scanSplit(
 
   // 本地拆分成功 → 直接用
   if (chunks.length > 1) {
-    return { chunks, needsLLM: false };
+    return { chunks, needsAI: false };
   }
 
-  // 本地拆不动 + 复杂句（3+ 从属标记）→ 降级 LLM
+  // 本地拆不动 + 复杂句（3+ 从属标记）→ 降级 AI
   const markerCount = countSubordinateMarkers(words);
   if (markerCount >= 3) {
-    return { chunks: [{ text: trimmed, level: 0 }], needsLLM: true };
+    return { chunks: [{ text: trimmed, level: 0 }], needsAI: true };
   }
 
   // 本地拆不动 + 不复杂 → 保持原样
-  return { chunks: [{ text: trimmed, level: 0 }], needsLLM: false };
+  return { chunks: [{ text: trimmed, level: 0 }], needsAI: false };
 }
 
 /**
@@ -314,5 +314,5 @@ export function scanSplit(
  * 格式：每行用前导空格表示缩进级别（2 空格 = 1 级）
  */
 export function toChunkedString(chunks: ScanChunk[]): string {
-  return chunks.map(c => "  ".repeat(c.level) + c.text).join("\n");
+  return chunks.map(c => "  ".repeat(c.level || 0) + c.text).join("\n");
 }

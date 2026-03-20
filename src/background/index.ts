@@ -4,15 +4,15 @@
  * 职责：
  * 1. 接收 Content Script 的分块请求
  * 2. 查 IndexedDB 缓存，命中直接返回
- * 3. 未命中的句子调 LLM API
+ * 3. 未命中的句子调 AI API
  * 4. 结果写入缓存后返回
  * 5. 管理配置和站点开关
  */
 
 import type { Message, BaitConfig, ChunkResult, PatternKey } from "../shared/types.ts";
-import { DEFAULT_CONFIG, resolveLLMConfig, migrateLLMConfig } from "../shared/types.ts";
+import { DEFAULT_CONFIG, resolveAIConfig, migrateAIConfig } from "../shared/types.ts";
 import { getCachedBatch, setCacheBatch } from "../shared/cache.ts";
-import { chunkSentences, analyzeSentenceFull } from "../shared/llm-adapter.ts";
+import { chunkSentences, analyzeSentenceFull } from "../shared/AI-adapter.ts";
 import { openDB as openDataDB, pendingSentenceDAO, learningRecordDAO } from "../shared/db.ts";
 
 // ========== 配置管理 ==========
@@ -29,7 +29,7 @@ async function getConfig(): Promise<BaitConfig> {
     config.chunkGranularity = "fine";
   }
   // 兼容旧格式 + 新格式
-  config.llm = migrateLLMConfig(config.llm);
+  config.AI = migrateAIConfig(config.AI);
 
   return config;
 }
@@ -37,8 +37,8 @@ async function getConfig(): Promise<BaitConfig> {
 async function updateConfig(partial: Partial<BaitConfig>): Promise<BaitConfig> {
   const current = await getConfig();
   const updated = { ...current, ...partial };
-  if (partial.llm) {
-    updated.llm = { ...current.llm, ...partial.llm };
+  if (partial.AI) {
+    updated.AI = { ...current.AI, ...partial.AI };
   }
   await chrome.storage.sync.set(updated as Record<string, unknown>);
   return updated;
@@ -144,20 +144,20 @@ async function flushBatch(): Promise<void> {
 
   try {
     const config = await getConfig();
-    const llmConfig = resolveLLMConfig(config.llm);
+    const AIConfig = resolveAIConfig(config.AI);
 
-    if (!llmConfig.apiKey) {
+    if (!AIConfig.apiKey) {
       throw new Error("API key 未配置");
     }
 
-    const results = await chunkSentences(batch.sentences, llmConfig);
+    const results = await chunkSentences(batch.sentences, AIConfig);
 
     // 写缓存
     const cachePairs = results.map((r, i) => ({
       sentence: batch.sentences[i],
       result: r,
     }));
-    setCacheBatch(cachePairs).catch(() => {});
+    setCacheBatch(cachePairs).catch(() => { });
 
     // 回调所有等待者
     for (let i = 0; i < results.length; i++) {
@@ -208,9 +208,9 @@ async function getDB(): Promise<IDBDatabase> {
 async function processAnalysisBatch(sentenceIds: string[]): Promise<void> {
   const db = await getDB();
   const config = await getConfig();
-  const llmConfig = resolveLLMConfig(config.llm);
+  const AIConfig = resolveAIConfig(config.AI);
 
-  if (!llmConfig.apiKey) return;
+  if (!AIConfig.apiKey) return;
 
   for (let i = 0; i < sentenceIds.length; i++) {
     const id = sentenceIds[i];
@@ -227,11 +227,11 @@ async function processAnalysisBatch(sentenceIds: string[]): Promise<void> {
           type: "sentenceAnalyzed",
           pendingId: id,
           learningRecord: existing,
-        }).catch(() => {});
+        }).catch(() => { });
         continue;
       }
 
-      const result = await analyzeSentenceFull(pending.text, llmConfig);
+      const result = await analyzeSentenceFull(pending.text, AIConfig);
 
       const lr = await learningRecordDAO.add(db, {
         sentence: pending.text,
@@ -241,7 +241,7 @@ async function processAnalysisBatch(sentenceIds: string[]): Promise<void> {
         pattern_key: result.pattern_key as PatternKey,
         new_words: result.new_words,
         source_url: pending.source_url,
-        llm_provider: config.llm.activeProvider,
+        AI_provider: config.AI.activeProvider,
       });
 
       await pendingSentenceDAO.markAnalyzed(db, id);
@@ -250,13 +250,13 @@ async function processAnalysisBatch(sentenceIds: string[]): Promise<void> {
         type: "sentenceAnalyzed",
         pendingId: id,
         learningRecord: lr,
-      }).catch(() => {});
+      }).catch(() => { });
     } catch (err) {
       chrome.runtime.sendMessage({
         type: "sentenceAnalysisFailed",
         pendingId: id,
         error: err instanceof Error ? err.message : "Unknown error",
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     // 每条之间加 500ms 间隔，避免 API 限流
@@ -330,7 +330,7 @@ async function handleMessage(
             updateIcon(tab.id, result.enabled);
             chrome.tabs.sendMessage(tab.id, {
               type: result.enabled ? "activate" : "deactivate",
-            }).catch(() => {});
+            }).catch(() => { });
           }
         }
       }
@@ -342,7 +342,7 @@ async function handleMessage(
       const { tabId } = message;
       pausedTabs.add(tabId);
       updateIcon(tabId, false);
-      chrome.tabs.sendMessage(tabId, { type: "pause" }).catch(() => {});
+      chrome.tabs.sendMessage(tabId, { type: "pause" }).catch(() => { });
       return { ok: true };
     }
 
@@ -350,7 +350,7 @@ async function handleMessage(
       const { tabId } = message;
       pausedTabs.delete(tabId);
       updateIcon(tabId, true);
-      chrome.tabs.sendMessage(tabId, { type: "resume" }).catch(() => {});
+      chrome.tabs.sendMessage(tabId, { type: "resume" }).catch(() => { });
       return { ok: true };
     }
 
@@ -364,8 +364,8 @@ async function handleMessage(
 
     case "hasApiKey": {
       const cfg = await getConfig();
-      const llmCfg = resolveLLMConfig(cfg.llm);
-      return { hasKey: !!llmCfg.apiKey };
+      const AICfg = resolveAIConfig(cfg.AI);
+      return { hasKey: !!AICfg.apiKey };
     }
 
     case "getConfig":
@@ -393,7 +393,7 @@ async function handleMessage(
     case "analyzeSentences": {
       const { sentenceIds } = message;
       // 立即返回，异步处理
-      processAnalysisBatch(sentenceIds).catch(() => {});
+      processAnalysisBatch(sentenceIds).catch(() => { });
       return { ok: true };
     }
 

@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { storage } from '../services/storage';
-import { AccessibilityService } from '../services/accessibility';
 
 const DEFAULT_APPS = [
   { id: 'com.twitter.android', name: 'Twitter', enabled: true },
@@ -48,9 +47,6 @@ export function WhitelistScreen() {
 
     const whitelist = newApps.filter(app => app.enabled).map(app => app.id);
     await storage.set('whitelist', whitelist);
-
-    // 同步更新无障碍服务的白名单
-    AccessibilityService.updateWhitelist(whitelist);
   };
 
   const renderItem = ({ item }: { item: typeof DEFAULT_APPS[0] }) => (

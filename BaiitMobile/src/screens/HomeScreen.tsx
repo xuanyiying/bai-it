@@ -18,7 +18,7 @@ import Animated, {
   FadeInDown,
   FadeIn,
   SlideInRight,
-  Layout,
+  LinearTransition,
 } from 'react-native-reanimated';
 import { storage } from '../services/storage';
 import { ClipboardService, ClipboardTextEvent } from '../services/clipboard';
@@ -28,6 +28,7 @@ import { ProficiencyTest } from '../services/proficiency-test';
 import { ScanResult, WordInfo } from '../types';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
+import { generateResultId, generateVocabId } from '../utils/id-generator';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -131,7 +132,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
         const wordInfos: WordInfo[] = analysis.words.map(w => ({
           word: w.word,
           isNew: w.isNew,
-          definition: w.definition,
+          definition: w.definition || '',
+          difficulty: w.difficulty || 3,
+          frequency: w.frequency || 0,
         }));
 
         for (const wordInfo of wordInfos.filter(w => w.isNew)) {
@@ -140,25 +143,29 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           if (existingVocab) {
             await Database.incrementEncounterCount(wordInfo.word);
           } else {
+            const id = await generateVocabId(wordInfo.word);
             const vocabRecord: VocabRecord = {
-              id: `${Date.now()}-${wordInfo.word}`,
+              id,
               word: wordInfo.word,
               status: 'new',
               phonetic: wordInfo.definition?.match(/\/.*?\//)?.[0],
               definition: wordInfo.definition,
               encounterCount: 1,
-              firstSeenAt: Date.now(),
-              updatedAt: Date.now(),
+              firstSeenAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+              addedAt: new Date().toISOString(),
+              reviewCount: 0,
             };
             await Database.saveVocab(vocabRecord);
             await Database.recordLearningActivity('new');
           }
         }
-
+        const resultId = await generateResultId();
         const result: ScanResult = {
-          id: Date.now().toString(),
+          id: resultId,
           text: text.slice(0, 500),
           words: wordInfos,
+          sentences: analysis.sentences || [],
           timestamp: event.timestamp,
         };
 
@@ -209,10 +216,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
     );
   };
 
-  const openSettings = async () => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('Settings');
-  };
+
 
   const openBrowser = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -275,9 +279,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               </Text>
               <Text style={styles.subtitle}>{t('home.subtitle')}</Text>
             </View>
-            <TouchableOpacity onPress={openSettings} style={styles.settingsButton}>
-              <Ionicons name="settings-outline" size={22} color="#FFFFFF" />
-            </TouchableOpacity>
+
           </Animated.View>
         </SafeAreaView>
       </LinearGradient>
@@ -338,7 +340,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
           </Card>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(280).springify()}>
+        <View>
           <Card
             variant="elevated"
             style={styles.browserButton}
@@ -371,9 +373,9 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Ionicons name="chevron-forward" size={20} color={theme.colors.textTertiary} />
             </View>
           </Card>
-        </Animated.View>
+        </View>
 
-        <Animated.View entering={FadeInDown.delay(350).springify()}>
+        <View>
           <Card variant="elevated" style={styles.card}>
             <View style={styles.serviceRow}>
               <View style={styles.serviceInfo}>
@@ -429,7 +431,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               {clipboardEnabled ? t('home.clipboardEnabled') : t('home.clipboardDisabled')}
             </Text>
           </Card>
-        </Animated.View>
+        </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
@@ -469,7 +471,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
               <Animated.View
                 key={result.id}
                 entering={SlideInRight.delay(staggerDelay(index, 50)).springify()}
-                layout={Layout.springify()}
+                layout={LinearTransition.springify()}
               >
                 <Card variant="elevated" style={styles.resultCard}>
                   <View style={styles.resultHeader}>
@@ -485,8 +487,8 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                         minute: '2-digit',
                       })}
                     </Text>
-                    {result.sourceApp && (
-                      <Badge label={result.sourceApp} variant="primary" size="xs" />
+                    {result.source && (
+                      <Badge label={result.source} variant="primary" size="xs" />
                     )}
                   </View>
                   <Text style={[
@@ -503,7 +505,7 @@ export function HomeScreen({ navigation }: HomeScreenProps) {
                     <View style={styles.newWordsContainer}>
                       {result.words.filter(w => w.isNew).map((word, idx) => (
                         <Badge
-                          key={`${result.id}-${word.word}-${idx}`}
+                          key={`${result.id}-${word.word}-${idx}-${Date.now()}`}
                           label={word.word}
                           variant="error"
                           size="sm"

@@ -1,4 +1,4 @@
-# Local (Non-LLM) English Sentence Chunking Research
+# Local (Non-AI) English Sentence Chunking Research
 
 > Goal: Given a long English sentence, split it at grammatically meaningful break points (subordinate clauses, prepositional phrases, conjunctions, etc.) — entirely client-side in a Chrome extension.
 
@@ -9,7 +9,7 @@ The project already has a rule-based splitter in `src/shared/scan-rules.ts` with
 - Keyword-based trigger sets (COORDINATE, STRONG_SUBORDINATE, WEAK_SUBORDINATE, RELATIVE, TRANSITION, PREPOSITION_FINE)
 - Comma-gated vs. ungated splitting logic
 - Short-chunk merging (< 3 words)
-- LLM fallback for complex sentences (3+ subordinate markers that can't be split locally)
+- AI fallback for complex sentences (3+ subordinate markers that can't be split locally)
 
 This is already a solid rule-based approach. The question is: what can improve it?
 
@@ -314,7 +314,7 @@ This would give iSimp-like shallow parsing capability at minimal cost.
 1. **Don't add spacy-wasm or Transformers.js** — model files are 10-100MB, unacceptable for an extension
 2. **Don't train a custom neural model** — overkill for this use case, and maintaining models is expensive
 3. **Don't use compromise.js for splitting** — its `.clauses()` method is undocumented and unreliable; the library is 200KB with mediocre accuracy. If we're adding a dependency, pos-js at 50KB gives more targeted value
-4. **Don't try to handle all edge cases** — the LLM fallback exists for a reason. Focus on getting the common 80% right locally, let LLM handle the complex 20%
+4. **Don't try to handle all edge cases** — the AI fallback exists for a reason. Focus on getting the common 80% right locally, let AI handle the complex 20%
 
 ---
 

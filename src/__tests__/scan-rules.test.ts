@@ -8,7 +8,7 @@ describe("并列句拆分", () => {
     const result = scanSplit(
       "The team developed the frontend, and the backend was handled by a separate group of engineers.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
     expect(result.chunks.some(c => c.text.startsWith("and "))).toBe(true);
   });
@@ -17,7 +17,7 @@ describe("并列句拆分", () => {
     const result = scanSplit(
       "She wanted to attend the conference, but her schedule was already fully booked for the entire week.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
     expect(result.chunks.some(c => c.text.startsWith("but "))).toBe(true);
   });
@@ -26,7 +26,7 @@ describe("并列句拆分", () => {
     const result = scanSplit(
       "He wrote the proposal, and she reviewed the draft, but the client rejected it in the end.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(3);
   });
 
@@ -34,7 +34,7 @@ describe("并列句拆分", () => {
     const result = scanSplit(
       "The first phase focused on research; the second phase involved implementation and testing across multiple environments.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
   });
 });
@@ -46,7 +46,7 @@ describe("转折句拆分", () => {
     const result = scanSplit(
       "The initial results were promising, however the long-term impact remained unclear and needed further investigation.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.some(c =>
       c.text.toLowerCase().startsWith("however"),
     )).toBe(true);
@@ -56,7 +56,7 @@ describe("转折句拆分", () => {
     const result = scanSplit(
       "Although the weather was terrible and the roads were icy, they decided to continue with the outdoor event.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
     // 第一块应该是从句（level 1）
     expect(result.chunks[0].level).toBe(1);
@@ -66,7 +66,7 @@ describe("转折句拆分", () => {
     const result = scanSplit(
       "The stock market reached record highs this quarter, while unemployment numbers continued to climb in several regions.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
   });
 });
@@ -78,7 +78,7 @@ describe("条件句拆分", () => {
     const result = scanSplit(
       "If the system detects any anomalous behavior in the network, it will automatically trigger a comprehensive security review.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
     expect(result.chunks[0].level).toBe(1); // if 子句是从属
   });
@@ -87,7 +87,7 @@ describe("条件句拆分", () => {
     const result = scanSplit(
       "The project will be delayed significantly unless the team receives additional funding and resources from the department.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.some(c =>
       c.text.toLowerCase().startsWith("unless"),
     )).toBe(true);
@@ -100,7 +100,7 @@ describe("条件句拆分", () => {
     const result = scanSplit(
       "The application crashes with an unexpected error, when users try to upload files larger than five megabytes.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
   });
 });
@@ -112,7 +112,7 @@ describe("从句拆分", () => {
     const result = scanSplit(
       "The new framework significantly reduces boilerplate code, which makes development faster and more enjoyable for the entire team.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.some(c =>
       c.text.toLowerCase().startsWith("which"),
     )).toBe(true);
@@ -125,7 +125,7 @@ describe("从句拆分", () => {
     const result = scanSplit(
       "The researchers at the university, who had been studying this phenomenon for over a decade, finally published their findings.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.some(c =>
       c.text.toLowerCase().startsWith("who"),
     )).toBe(true);
@@ -135,7 +135,7 @@ describe("从句拆分", () => {
     const result = scanSplit(
       "Many developers prefer TypeScript over plain JavaScript because it catches type errors at compile time and improves code maintainability.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.some(c =>
       c.text.toLowerCase().startsWith("because"),
     )).toBe(true);
@@ -152,13 +152,13 @@ describe("短句不拆", () => {
     const result = scanSplit("The quick brown fox jumps.", "medium");
     expect(result.chunks.length).toBe(1);
     expect(result.chunks[0].text).toBe("The quick brown fox jumps.");
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 
   it("短于阈值的句子原样返回 (short)", () => {
     const result = scanSplit("Hello world!", "short");
     expect(result.chunks.length).toBe(1);
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 
   it("长阈值下中等句子不拆", () => {
@@ -167,7 +167,7 @@ describe("短句不拆", () => {
       "long",
     );
     expect(result.chunks.length).toBe(1);
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 
   it("有不定式短语的长句在 to + 动词处拆分（POS 检测）", () => {
@@ -177,7 +177,7 @@ describe("短句不拆", () => {
     // POS 检测到 TO + VB（不定式短语），在 "to deliver" 处拆分
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
     expect(result.chunks.some(c => c.text.toLowerCase().startsWith("to deliver"))).toBe(true);
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 });
 
@@ -219,39 +219,39 @@ describe("缩进层级", () => {
 
 // ========== 验收标准：复杂句降级 ==========
 
-describe("复杂句降级 LLM", () => {
+describe("复杂句降级 AI", () => {
   it("3+ 从属标记 + 本地拆分成功 → 不降级", () => {
     // 有 3+ 标记但本地规则能拆分 → 优先用本地结果
     const result = scanSplit(
       "The researcher who had been studying the phenomenon that was first observed in the laboratory where the original experiments were conducted finally published the comprehensive report.",
     );
-    // 本地拆分能在 who/where 处断行，所以不需要 LLM
-    expect(result.needsLLM).toBe(false);
+    // 本地拆分能在 who/where 处断行，所以不需要 AI
+    expect(result.needsAI).toBe(false);
     expect(result.chunks.length).toBeGreaterThanOrEqual(2);
   });
 
-  it("3+ 从属标记 + 本地拆不动 → 降级 LLM", () => {
+  it("3+ 从属标记 + 本地拆不动 → 降级 AI", () => {
     // 13 词，3 个弱从属标记，无逗号。medium 模式下 15+ 词才有宽松规则
     const result = scanSplit(
       "Data collected since the update while monitoring until the test completed is questionable.",
       "medium",
       "medium",
     );
-    expect(result.needsLLM).toBe(true);
+    expect(result.needsAI).toBe(true);
   });
 
   it("2 个从属标记不降级", () => {
     const result = scanSplit(
       "The book that she recommended, which was published last year by a prestigious university press, became a bestseller.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 
   it("简单长句不降级", () => {
     const result = scanSplit(
       "The development team successfully completed the migration of all critical services to the new cloud infrastructure, and the performance metrics showed a significant improvement across all key indicators.",
     );
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 });
 
@@ -285,7 +285,7 @@ describe("边界情况", () => {
   it("空字符串", () => {
     const result = scanSplit("");
     expect(result.chunks.length).toBe(1);
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 
   it("纯标点", () => {
@@ -380,7 +380,7 @@ describe("长句宽松规则", () => {
       "A firm commitment to the principle that AGI companies have to devolve power to democracies and avoid unduly concentrating power in themselves even when that leads to uncomfortable places is something I will not regret.",
     );
     expect(result.chunks.length).toBeGreaterThanOrEqual(3);
-    expect(result.needsLLM).toBe(false);
+    expect(result.needsAI).toBe(false);
   });
 });
 

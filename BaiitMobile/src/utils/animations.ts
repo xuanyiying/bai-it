@@ -6,7 +6,7 @@ import Animated, {
   FadeOut,
   FadeOutDown,
   FadeOutUp,
-  Layout,
+  LinearTransition,
   SlideInRight,
   SlideInLeft,
   SlideOutRight,
@@ -56,8 +56,8 @@ export const presets = {
   zoomInFast: ZoomIn.duration(animation.duration.fast),
   zoomOut: ZoomOut.duration(animation.duration.normal),
   
-  layout: Layout.springify().damping(20).stiffness(100),
-  layoutFast: Layout.duration(animation.duration.fast),
+  layout: LinearTransition.springify().damping(20).stiffness(100),
+  layoutFast: LinearTransition.duration(animation.duration.fast),
 };
 
 export const createSpringConfig = (

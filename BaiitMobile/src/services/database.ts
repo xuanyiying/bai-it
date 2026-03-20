@@ -14,6 +14,8 @@ import {
   MobileReviewItem as ReviewItem,
   MobileAppStats as AppStats,
 } from '../types';
+import { Dictionary } from './dictionary';
+import { generateId } from '../utils/id-generator';
 
 export type { VocabStatus, VocabRecord, VocabContextRecord, SavedSentence, SentenceAnalysis, LearningRecord, ReviewItem, AppStats };
 
@@ -29,10 +31,6 @@ const KEYS = {
 };
 
 // ========== 工具函数 ==========
-
-function generateId(): string {
-  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
 
 function getTodayString(): string {
   return new Date().toISOString().split('T')[0];
@@ -70,18 +68,59 @@ class DatabaseClass {
     return vocab.find(v => v.word.toLowerCase() === word.toLowerCase()) || null;
   }
 
+  /**
+   * 检查单词是否为简单词（不应加入生词本）
+   */
+  private isSimpleWord(word: string): boolean {
+    const w = word.toLowerCase().trim();
+
+    // 使用 Dictionary 服务的过滤逻辑
+    if (Dictionary.isCommonWord(w)) {
+      return true;
+    }
+
+    // 额外过滤：长度小于等于3的单词
+    if (w.length <= 3) {
+      return true;
+    }
+
+    // 过滤纯数字
+    if (/^\d+$/.test(w)) {
+      return true;
+    }
+
+    // 过滤常见缩写
+    const commonAbbreviations = new Set([
+      'etc', 'eg', 'ie', 'vs', 'viz', 'cf', 'am', 'pm',
+      'mr', 'mrs', 'ms', 'dr', 'prof', 'sr', 'jr', 'st',
+      'co', 'inc', 'ltd', 'llc', 'corp',
+    ]);
+    if (commonAbbreviations.has(w)) {
+      return true;
+    }
+
+    return false;
+  }
+
   async saveVocab(vocab: VocabRecord): Promise<void> {
+    // 过滤简单词，避免过度标注
+    if (this.isSimpleWord(vocab.word)) {
+      console.log(`[Database] 跳过简单词: ${vocab.word}`);
+      return;
+    }
+
     const all = await this.getAllVocab();
     const index = all.findIndex(v => v.id === vocab.id);
 
     if (index >= 0) {
-      all[index] = { ...vocab, updatedAt: Date.now() };
+      all[index] = { ...vocab, updatedAt: new Date().toISOString() };
     } else {
+      const id = vocab.id || await generateId();
       all.push({
         ...vocab,
-        id: vocab.id || generateId(),
-        firstSeenAt: Date.now(),
-        updatedAt: Date.now(),
+        id,
+        firstSeenAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       });
     }
 
@@ -94,10 +133,10 @@ class DatabaseClass {
     if (!vocab) return;
 
     vocab.status = status;
-    vocab.updatedAt = Date.now();
+    vocab.updatedAt = new Date().toISOString();
 
     if (status === 'mastered' && !vocab.masteredAt) {
-      vocab.masteredAt = Date.now();
+      vocab.masteredAt = new Date().toISOString();
     }
 
     await this.saveVocab(vocab);
@@ -109,8 +148,8 @@ class DatabaseClass {
   async incrementEncounterCount(word: string): Promise<void> {
     const vocab = await this.getVocabByWord(word);
     if (vocab) {
-      vocab.encounterCount++;
-      vocab.updatedAt = Date.now();
+      vocab.encounterCount = (vocab.encounterCount || 0) + 1;
+      vocab.updatedAt = new Date().toISOString();
       await this.saveVocab(vocab);
     }
   }
@@ -148,17 +187,18 @@ class DatabaseClass {
   async getVocabContexts(vocabId: string): Promise<VocabContextRecord[]> {
     const data = await AsyncStorage.getItem(KEYS.VOCAB_CONTEXT);
     const all: VocabContextRecord[] = data ? JSON.parse(data) : [];
-    return all.filter(c => c.vocabId === vocabId).sort((a, b) => b.createdAt - a.createdAt);
+    return all.filter(c => c.vocabId === vocabId).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async saveVocabContext(context: VocabContextRecord): Promise<void> {
     const data = await AsyncStorage.getItem(KEYS.VOCAB_CONTEXT);
     const all: VocabContextRecord[] = data ? JSON.parse(data) : [];
 
+    const id = context.id || await generateId();
     all.push({
       ...context,
-      id: context.id || generateId(),
-      createdAt: Date.now(),
+      id,
+      createdAt: new Date().toISOString(),
     });
 
     await AsyncStorage.setItem(KEYS.VOCAB_CONTEXT, JSON.stringify(all));
@@ -176,7 +216,7 @@ class DatabaseClass {
   async getAllSentences(): Promise<SavedSentence[]> {
     const data = await AsyncStorage.getItem(KEYS.SENTENCES);
     const sentences: SavedSentence[] = data ? JSON.parse(data) : [];
-    return sentences.sort((a, b) => b.createdAt - a.createdAt);
+    return sentences.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }
 
   async getSentenceById(id: string): Promise<SavedSentence | null> {
@@ -188,13 +228,14 @@ class DatabaseClass {
     const all = await this.getAllSentences();
     const index = all.findIndex(s => s.id === sentence.id);
 
-    const now = Date.now();
+    const now = new Date().toISOString();
     if (index >= 0) {
       all[index] = { ...sentence, updatedAt: now };
     } else {
+      const id = sentence.id || await generateId();
       all.unshift({
         ...sentence,
-        id: sentence.id || generateId(),
+        id,
         createdAt: now,
         updatedAt: now,
       });
@@ -245,32 +286,32 @@ class DatabaseClass {
 
     if (!record) {
       record = {
-        id: generateId(),
+        id: await generateId(),
         date: today,
         newWords: 0,
         reviewedWords: 0,
         masteredWords: 0,
         sentencesCollected: 0,
         studyTimeMinutes: 0,
-      };
+      } as LearningRecord;
     }
 
     switch (type) {
       case 'new':
-        record.newWords++;
+        record.newWords = (record.newWords || 0) + 1;
         break;
       case 'reviewed':
-        record.reviewedWords++;
+        record.reviewedWords = (record.reviewedWords || 0) + 1;
         break;
       case 'mastered':
-        record.masteredWords++;
+        record.masteredWords = (record.masteredWords || 0) + 1;
         break;
       case 'sentence':
-        record.sentencesCollected++;
+        record.sentencesCollected = (record.sentencesCollected || 0) + 1;
         break;
     }
 
-    record.studyTimeMinutes += minutes;
+    record.studyTimeMinutes = (record.studyTimeMinutes || 0) + minutes;
 
     const data = await AsyncStorage.getItem(KEYS.LEARNING_RECORDS);
     const all: LearningRecord[] = data ? JSON.parse(data) : [];
@@ -291,8 +332,12 @@ class DatabaseClass {
   async getReviewItems(dueBefore: number = Date.now()): Promise<ReviewItem[]> {
     const data = await AsyncStorage.getItem(KEYS.REVIEW_ITEMS);
     const all: ReviewItem[] = data ? JSON.parse(data) : [];
-    return all.filter(r => r.nextReviewAt <= dueBefore)
-      .sort((a, b) => a.nextReviewAt - b.nextReviewAt);
+    return all.filter(r => r.nextReviewAt && new Date(r.nextReviewAt).getTime() <= dueBefore)
+      .sort((a, b) => {
+        const aTime = a.nextReviewAt ? new Date(a.nextReviewAt).getTime() : 0;
+        const bTime = b.nextReviewAt ? new Date(b.nextReviewAt).getTime() : 0;
+        return aTime - bTime;
+      });
   }
 
   async saveReviewItem(item: ReviewItem): Promise<void> {
@@ -320,15 +365,16 @@ class DatabaseClass {
     if (!item) return;
 
     // SM-2 算法
+    const repetitions = item.repetitions || 0;
     if (quality >= 3) {
-      if (item.repetitions === 0) {
+      if (repetitions === 0) {
         item.interval = 1;
-      } else if (item.repetitions === 1) {
+      } else if (repetitions === 1) {
         item.interval = 6;
       } else {
         item.interval = Math.round(item.interval * item.easeFactor);
       }
-      item.repetitions++;
+      item.repetitions = repetitions + 1;
     } else {
       item.repetitions = 0;
       item.interval = 1;
@@ -339,8 +385,8 @@ class DatabaseClass {
       item.easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
     );
 
-    item.lastReviewedAt = Date.now();
-    item.nextReviewAt = Date.now() + item.interval * 24 * 60 * 60 * 1000;
+    item.lastReviewedAt = new Date().toISOString();
+    item.nextReviewAt = new Date(Date.now() + item.interval * 24 * 60 * 60 * 1000).toISOString();
 
     await AsyncStorage.setItem(KEYS.REVIEW_ITEMS, JSON.stringify(all));
     await this.recordLearningActivity('reviewed');
@@ -360,6 +406,10 @@ class DatabaseClass {
       totalSentences: 0,
       currentStreak: 0,
       longestStreak: 0,
+      savedSentences: 0,
+      analyzedSentences: 0,
+      streakDays: 0,
+      totalStudyTime: 0,
     };
   }
 
@@ -398,7 +448,7 @@ class DatabaseClass {
     }
 
     // 计算最长连续天数
-    longestStreak = Math.max(currentStreak, ...learningRecords.map(r => r.studyTimeMinutes > 0 ? 1 : 0));
+    longestStreak = Math.max(currentStreak, ...learningRecords.map(r => (r.studyTimeMinutes || 0) > 0 ? 1 : 0));
 
     const stats: AppStats = {
       totalWords: vocab.length,
@@ -409,6 +459,10 @@ class DatabaseClass {
       currentStreak,
       longestStreak,
       lastStudyDate: hasTodayRecord ? today : undefined,
+      savedSentences: sentences.length,
+      analyzedSentences: sentences.filter(s => s.isAnalyzed).length,
+      streakDays: currentStreak,
+      totalStudyTime: learningRecords.reduce((sum, r) => sum + (r.studyTimeMinutes || 0), 0),
     };
 
     await AsyncStorage.setItem(KEYS.STATS, JSON.stringify(stats));
@@ -453,6 +507,12 @@ class DatabaseClass {
     for (const key of keys) {
       await AsyncStorage.removeItem(key);
     }
+  }
+
+  async clearAllVocab(): Promise<void> {
+    await AsyncStorage.removeItem(KEYS.VOCAB);
+    await AsyncStorage.removeItem(KEYS.VOCAB_CONTEXT);
+    await this.updateStats();
   }
 }
 

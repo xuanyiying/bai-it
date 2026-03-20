@@ -26,9 +26,9 @@ Unknown words are underlined with a dotted line. Hover to see the Chinese defini
 
 See a sentence that wasn't auto-chunked? Click the trigger button to manually "break" it.
 
-### LLM Deep Analysis (Optional)
+### AI Deep Analysis (Optional)
 
-Add an LLM API key (Gemini, OpenAI, DeepSeek, etc.) and manual breaks upgrade to AI-powered analysis: sentence pattern identification, structure explanation, and writing tips.
+Add an AI API key (Gemini, OpenAI, DeepSeek, etc.) and manual breaks upgrade to AI-powered analysis: sentence pattern identification, structure explanation, and writing tips.
 
 ### Learning Dashboard
 
@@ -64,7 +64,7 @@ Built-in management page with four tabs:
 3. **Manual break** — Click the trigger button on any sentence you find difficult
 4. **Add API key (optional)** — Extension icon → More Settings → Settings tab → Choose a provider, enter your API key
 
-Supported LLM providers:
+Supported AI providers:
 
 | Provider | Default Model | Notes |
 |----------|--------------|-------|
@@ -79,7 +79,7 @@ Supported LLM providers:
 - **No backend**: No server. Your data is never uploaded anywhere
 - **No login**: No account needed
 - **Local storage**: All learning data stays in your browser's IndexedDB
-- **API keys stay local**: Your keys are stored only in your browser. The extension calls LLM APIs directly from your browser — no intermediary server
+- **API keys stay local**: Your keys are stored only in your browser. The extension calls AI APIs directly from your browser — no intermediary server
 
 Full privacy policy: [PRIVACY.md](./PRIVACY.md)
 

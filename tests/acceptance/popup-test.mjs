@@ -3,7 +3,7 @@
  *
  * 验证：
  * 1. Popup 能正常打开渲染
- * 2. LLM 配置能保存和持久化
+ * 2. AI 配置能保存和持久化
  * 3. 站点开关功能
  */
 import puppeteer from "puppeteer";
@@ -54,8 +54,8 @@ try {
     btnToggle: document.getElementById("btn-toggle") !== null,
     btnPause: document.getElementById("btn-pause") !== null,
     configToggle: document.getElementById("config-toggle") !== null,
-    llmFormat: document.getElementById("llm-format") !== null,
-    llmKey: document.getElementById("llm-key") !== null,
+    AIFormat: document.getElementById("AI-format") !== null,
+    AIKey: document.getElementById("AI-key") !== null,
     btnSave: document.getElementById("btn-save") !== null,
   }));
 
@@ -70,11 +70,11 @@ try {
   );
   configVisible ? ok("未配置 Key 时自动展开配置面板") : fail("配置面板未自动展开");
 
-  // 检查 3：LLM 配置保存
-  console.log("\n[LLM 配置]");
-  await page.select("#llm-format", "gemini");
-  await page.type("#llm-key", "test-api-key-12345");
-  await page.type("#llm-model", "gemini-2.0-flash");
+  // 检查 3：AI 配置保存
+  console.log("\n[AI 配置]");
+  await page.select("#AI-format", "gemini");
+  await page.type("#AI-key", "test-api-key-12345");
+  await page.type("#AI-model", "gemini-2.0-flash");
   await page.click("#btn-save");
   await new Promise(r => setTimeout(r, 500));
 
@@ -92,9 +92,9 @@ try {
   await new Promise(r => setTimeout(r, 1000));
 
   const persistedConfig = await page2.evaluate(() => ({
-    format: document.getElementById("llm-format")?.value,
-    key: document.getElementById("llm-key")?.value,
-    model: document.getElementById("llm-model")?.value,
+    format: document.getElementById("AI-format")?.value,
+    key: document.getElementById("AI-key")?.value,
+    model: document.getElementById("AI-model")?.value,
   }));
 
   persistedConfig.key === "test-api-key-12345"
@@ -107,7 +107,7 @@ try {
 
   // 检查 5：OpenAI 格式切换显示 Base URL
   console.log("\n[格式切换]");
-  await page2.select("#llm-format", "openai-compatible");
+  await page2.select("#AI-format", "openai-compatible");
   await new Promise(r => setTimeout(r, 200));
 
   const urlVisible = await page2.evaluate(() =>
@@ -119,7 +119,7 @@ try {
   const swWorker = await swTarget.worker();
   if (swWorker) {
     await swWorker.evaluate(() =>
-      chrome.storage.sync.set({ llm: { format: "gemini", apiKey: "", baseUrl: "", model: "gemini-2.0-flash" } }),
+      chrome.storage.sync.set({ AI: { format: "gemini", apiKey: "", baseUrl: "", model: "gemini-2.0-flash" } }),
     );
   }
 

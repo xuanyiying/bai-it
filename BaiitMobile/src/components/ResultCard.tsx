@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Ionicons } from '@expo/vector-icons';
 import { ScanResult, WordInfo } from '../types';
 import { Database, SavedSentence, SentenceAnalysis } from '../services/database';
+import { analyzeSentence, isAIConfigured } from '../services/sentence-analyzer';
 
 interface ResultCardProps {
   result: ScanResult;
@@ -28,12 +29,12 @@ export function ResultCard({ result }: ResultCardProps) {
   const renderWord = (word: WordInfo, index: number) => {
     if (word.isNew) {
       return (
-        <Text key={index} style={styles.newWord}>
+        <Text key={`${result.id}-word-${index}`} style={styles.newWord}>
           {word.word}
         </Text>
       );
     }
-    return <Text key={index}>{word.word}</Text>;
+    return <Text key={`${result.id}-word-${index}`}>{word.word}</Text>;
   };
 
   const newWords = result.words.filter((w: WordInfo) => w.isNew);
@@ -44,32 +45,44 @@ export function ResultCard({ result }: ResultCardProps) {
     try {
       setIsAnalyzing(true);
 
-      // 构建句子分析（简化版，实际应该调用 AI 服务）
-      const analysis: SentenceAnalysis = {
-        chunked: result.text, // 简化处理
-        sentenceAnalysis: '句子结构分析...',
-        expressionTips: '表达提示...',
-        newWords: newWords.map((w: WordInfo) => ({
-          word: w.word,
-          definition: w.definition || '暂无释义',
-        })),
-      };
+      const aiAnalysis = await analyzeSentence(result.text);
+      const hasAI = await isAIConfigured();
+
+      let analysis: SentenceAnalysis;
+      if (aiAnalysis) {
+        analysis = aiAnalysis;
+      } else {
+        analysis = {
+          id: result.id,
+          sentenceId: result.id,
+          chunked: result.text,
+          sentence_analysis: hasAI ? 'AI 分析失败，请检查网络' : '请配置 AI API Key',
+          expression_tips: '',
+          newWords: newWords.map((w: WordInfo) => ({
+            word: w.word,
+            definition: w.definition || '暂无释义',
+          })),
+          analyzedAt: new Date().toISOString(),
+        };
+      }
 
       const sentence: SavedSentence = {
         id: result.id,
         text: result.text,
         words: result.words.map((w: WordInfo) => w.word),
-        sourceApp: result.sourceApp,
-        isAnalyzed: true,
+        sourceApp: result.source,
+        isAnalyzed: !!aiAnalysis,
         analysisResult: analysis,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        savedAt: new Date().toISOString(),
+        newWords: newWords.map(w => w.word),
       };
 
       await Database.saveSentence(sentence);
       setIsSaved(true);
 
-      Alert.alert('成功', '句子已收藏');
+      Alert.alert('成功', aiAnalysis ? '句子已收藏并分析' : '句子已收藏（未进行 AI 分析）');
     } catch (error) {
       console.error('保存句子失败:', error);
       Alert.alert('错误', '保存句子失败');
@@ -83,8 +96,8 @@ export function ResultCard({ result }: ResultCardProps) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <Text style={styles.time}>{formatTime(result.timestamp)}</Text>
-          {result.sourceApp && (
-            <Text style={styles.source}>{result.sourceApp}</Text>
+          {result.source && (
+            <Text style={styles.source}>{result.source}</Text>
           )}
         </View>
         <View style={styles.headerActions}>
@@ -96,11 +109,15 @@ export function ResultCard({ result }: ResultCardProps) {
             style={styles.actionBtn}
             disabled={isSaved || isAnalyzing}
           >
-            <Ionicons
-              name={isSaved ? "bookmark" : "bookmark-outline"}
-              size={18}
-              color={isSaved ? "#4CAF50" : "#2196F3"}
-            />
+            {isAnalyzing ? (
+              <ActivityIndicator size="small" color="#2196F3" />
+            ) : (
+              <Ionicons
+                name={isSaved ? "bookmark" : "bookmark-outline"}
+                size={18}
+                color={isSaved ? "#4CAF50" : "#2196F3"}
+              />
+            )}
           </TouchableOpacity>
         </View>
       </View>
@@ -116,7 +133,7 @@ export function ResultCard({ result }: ResultCardProps) {
           </Text>
           <View style={styles.newWordsList}>
             {newWords.map((word: WordInfo, index: number) => (
-              <View key={index} style={styles.wordTag}>
+              <View key={`${result.id}-newword-${index}`} style={styles.wordTag}>
                 <Text style={styles.wordTagText}>{word.word}</Text>
                 {word.definition && (
                   <Text style={styles.wordDefinition} numberOfLines={1}>

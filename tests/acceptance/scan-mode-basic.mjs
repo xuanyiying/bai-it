@@ -119,8 +119,8 @@ try {
   if (results.chunkedCount > 0 || results.triggerCount > 0) {
     ok(`DOM 处理生效 (${results.chunkedCount} 个分块 + ${results.triggerCount} 个触发按钮)`);
   } else {
-    // 可能 API key 未配置导致 LLM 调用失败
-    console.log("  △ 无分块元素（可能因为 API key 未配置，细读模式的 LLM 调用失败）");
+    // 可能 API key 未配置导致 AI 调用失败
+    console.log("  △ 无分块元素（可能因为 API key 未配置，细读模式的 AI 调用失败）");
     console.log("  → 这在没有 API key 的环境下是预期行为");
     console.log("  → 扫读模式的本地拆分不依赖 API key，需要在扫读模式 URL 下测试");
   }

@@ -16,14 +16,15 @@ import Animated, {
   FadeInDown,
   FadeIn,
   SlideInRight,
-  Layout,
+  LinearTransition,
 } from 'react-native-reanimated';
 import { Database, VocabRecord, VocabStatus } from '../services/database';
+import { TTS } from '../services/tts';
 import { useTheme } from '../hooks/useTheme';
 import { useLanguage } from '../hooks/useLanguage';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
-import { Input } from '../components/ui/Input';
+import { SearchBar } from '../components/ui/SearchBar';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Button } from '../components/ui/Button';
 import { staggerDelay } from '../utils/animations';
@@ -47,7 +48,7 @@ export const VocabScreen: React.FC = () => {
   const loadVocab = useCallback(async () => {
     const all = await Database.getAllVocab();
     setVocabList(all);
-    
+
     setStats({
       total: all.length,
       new: all.filter(v => v.status === 'new').length,
@@ -64,18 +65,18 @@ export const VocabScreen: React.FC = () => {
 
   useEffect(() => {
     let filtered = vocabList;
-    
+
     if (selectedStatus !== 'all') {
       filtered = filtered.filter(v => v.status === selectedStatus);
     }
-    
+
     if (searchQuery) {
       filtered = filtered.filter(v =>
         v.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.definition?.toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
-    
+
     setFilteredList(filtered);
   }, [vocabList, selectedStatus, searchQuery]);
 
@@ -133,7 +134,7 @@ export const VocabScreen: React.FC = () => {
   };
 
   const renderFilterTab = (status: VocabStatus | 'all', label: string, count: number, index: number) => (
-    <Animated.View 
+    <Animated.View
       key={status}
       entering={FadeInDown.delay(staggerDelay(index, 60)).springify()}
     >
@@ -154,10 +155,10 @@ export const VocabScreen: React.FC = () => {
         <Text
           style={[
             styles.filterTabText,
-            { 
+            {
               color: selectedStatus === status ? '#FFFFFF' : theme.colors.text,
-              fontWeight: selectedStatus === status 
-                ? theme.typography.fontWeight.semibold 
+              fontWeight: selectedStatus === status
+                ? theme.typography.fontWeight.semibold
                 : theme.typography.fontWeight.medium,
             },
           ]}
@@ -166,15 +167,15 @@ export const VocabScreen: React.FC = () => {
         </Text>
         <View style={[
           styles.filterCount,
-          { 
-            backgroundColor: selectedStatus === status 
-              ? 'rgba(255,255,255,0.25)' 
+          {
+            backgroundColor: selectedStatus === status
+              ? 'rgba(255,255,255,0.25)'
               : theme.colors.surfaceSecondary,
           }
         ]}>
           <Text style={[
             styles.filterCountText,
-            { 
+            {
               color: selectedStatus === status ? '#FFFFFF' : theme.colors.textSecondary,
               fontWeight: theme.typography.fontWeight.semibold,
             }
@@ -189,14 +190,23 @@ export const VocabScreen: React.FC = () => {
   const renderVocabItem = ({ item, index }: { item: VocabRecord; index: number }) => (
     <Animated.View
       entering={SlideInRight.delay(staggerDelay(index, 40)).springify()}
-      layout={Layout.springify()}
+      layout={LinearTransition.springify()}
     >
       <Card variant="elevated" style={styles.vocabItem}>
         <View style={styles.vocabHeader}>
-          <View style={styles.wordContainer}>
+          <View style={styles.wordRow}>
+            <TouchableOpacity
+              style={[styles.speakerButton, { backgroundColor: theme.colors.brand.primaryLight + '20' }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                TTS.speak(item.word);
+              }}
+            >
+              <Ionicons name="headset-outline" size={20} color={theme.colors.primary} />
+            </TouchableOpacity>
             <Text style={[
-              styles.word, 
-              { 
+              styles.word,
+              {
                 color: theme.colors.text,
                 fontWeight: theme.typography.fontWeight.bold,
               }
@@ -211,11 +221,11 @@ export const VocabScreen: React.FC = () => {
             />
           </View>
         </View>
-        
+
         {item.phonetic && (
           <Text style={[
-            styles.phonetic, 
-            { 
+            styles.phonetic,
+            {
               color: theme.colors.primary,
               fontSize: theme.typography.fontSize.sm,
             }
@@ -223,26 +233,28 @@ export const VocabScreen: React.FC = () => {
             {item.phonetic}
           </Text>
         )}
-        
+
         {item.definition && (
-          <Text style={[
-            styles.definition, 
-            { 
-              color: theme.colors.textSecondary,
-              fontSize: theme.typography.fontSize.base,
-              lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
-            }
-          ]} numberOfLines={3}>
-            {item.definition}
-          </Text>
+          <View style={[styles.definitionContainer, { backgroundColor: theme.colors.surfaceSecondary }]}>
+            <Text style={[
+              styles.definition,
+              {
+                color: theme.colors.text,
+                fontSize: theme.typography.fontSize.base,
+                lineHeight: theme.typography.fontSize.base * theme.typography.lineHeight.relaxed,
+              }
+            ]} numberOfLines={4}>
+              {item.definition}
+            </Text>
+          </View>
         )}
-        
+
         <View style={styles.vocabFooter}>
           <View style={styles.footerItem}>
             <Ionicons name="repeat-outline" size={14} color={theme.colors.textTertiary} />
             <Text style={[
-              styles.encounterCount, 
-              { 
+              styles.encounterCount,
+              {
                 color: theme.colors.textTertiary,
                 fontSize: theme.typography.fontSize.xs,
               }
@@ -251,13 +263,13 @@ export const VocabScreen: React.FC = () => {
             </Text>
           </View>
           <Text style={[
-            styles.date, 
-            { 
+            styles.date,
+            {
               color: theme.colors.textTertiary,
               fontSize: theme.typography.fontSize.xs,
             }
           ]}>
-            {new Date(item.firstSeenAt).toLocaleDateString()}
+            {item.firstSeenAt ? new Date(item.firstSeenAt).toLocaleDateString() : '-'}
           </Text>
         </View>
 
@@ -298,8 +310,8 @@ export const VocabScreen: React.FC = () => {
       <View style={[styles.header, { backgroundColor: theme.colors.surface }]}>
         <Animated.View entering={FadeIn.delay(50)}>
           <Text style={[
-            styles.title, 
-            { 
+            styles.title,
+            {
               color: theme.colors.text,
               fontWeight: theme.typography.fontWeight.bold,
             }
@@ -307,8 +319,8 @@ export const VocabScreen: React.FC = () => {
             {t('vocab.title')}
           </Text>
           <Text style={[
-            styles.subtitle, 
-            { 
+            styles.subtitle,
+            {
               color: theme.colors.textSecondary,
               fontSize: theme.typography.fontSize.sm,
             }
@@ -316,18 +328,42 @@ export const VocabScreen: React.FC = () => {
             {t('vocab.total', { count: stats.total })}
           </Text>
         </Animated.View>
+
+        {stats.total > 0 && (
+          <TouchableOpacity
+            style={[styles.clearButton, { backgroundColor: theme.colors.error + '15' }]}
+            onPress={() => {
+              Alert.alert(
+                t('vocab.clearAllTitle') || '清空生词本',
+                t('vocab.clearAllConfirm') || '确定要清空所有生词吗？此操作不可撤销。',
+                [
+                  { text: t('common.cancel'), style: 'cancel' },
+                  {
+                    text: t('common.confirm'),
+                    style: 'destructive',
+                    onPress: async () => {
+                      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+                      await Database.clearAllVocab();
+                      await loadVocab();
+                    },
+                  },
+                ]
+              );
+            }}
+          >
+            <Ionicons name="trash-outline" size={20} color={theme.colors.error} />
+          </TouchableOpacity>
+        )}
       </View>
 
-      <Animated.View 
+      <Animated.View
         entering={FadeInDown.delay(100)}
-        style={[styles.searchContainer, { backgroundColor: theme.colors.surface }]}
+        style={styles.searchContainer}
       >
-        <Input
+        <SearchBar
           placeholder={t('vocab.searchPlaceholder')}
           value={searchQuery}
           onChangeText={setSearchQuery}
-          leftIcon="search-outline"
-          variant="filled"
         />
       </Animated.View>
 
@@ -344,8 +380,8 @@ export const VocabScreen: React.FC = () => {
         renderItem={renderVocabItem as ListRenderItem<VocabRecord>}
         contentContainerStyle={styles.listContainer}
         refreshControl={
-          <RefreshControl 
-            refreshing={refreshing} 
+          <RefreshControl
+            refreshing={refreshing}
             onRefresh={onRefresh}
             tintColor={theme.colors.primary}
             colors={[theme.colors.primary]}
@@ -372,6 +408,9 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 12,
     borderBottomWidth: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
   },
   title: {
     fontSize: 28,
@@ -380,8 +419,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 4,
   },
+  clearButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 4,
+  },
   searchContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     paddingBottom: 12,
   },
   filterContainer: {
@@ -427,14 +474,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  wordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  speakerButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   word: {
     fontSize: 22,
+    flex: 1,
   },
   phonetic: {
-    marginBottom: 6,
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  definitionContainer: {
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 12,
   },
   definition: {
-    marginBottom: 12,
+    marginBottom: 0,
   },
   vocabFooter: {
     flexDirection: 'row',

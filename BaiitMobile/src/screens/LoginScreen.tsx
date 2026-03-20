@@ -18,6 +18,7 @@ import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { RootStackParamList } from '../../App';
 import { useTheme } from '../hooks/useTheme';
 import { useAuth } from '../contexts/AuthContext';
+import { AuthService } from '../services/auth';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -71,6 +72,24 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
   const handleSkip = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     navigation.replace('Main');
+  };
+
+  // 模拟登录（用于开发和测试）
+  const handleMockSignIn = async () => {
+    if (isGoogleLoading || isAppleLoading) return;
+
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setIsGoogleLoading(true);
+
+    try {
+      await AuthService.mockSignIn('google');
+      navigation.replace('Main');
+    } catch (error) {
+      console.error('模拟登录失败:', error);
+      Alert.alert('登录失败', '模拟登录出现问题');
+    } finally {
+      setIsGoogleLoading(false);
+    }
   };
 
   return (
@@ -151,6 +170,21 @@ export function LoginScreen({ navigation }: LoginScreenProps) {
             </Text>
             <View style={[styles.dividerLine, { backgroundColor: theme.colors.border }]} />
           </View>
+
+          {/* 模拟登录按钮（仅开发环境显示） */}
+          {__DEV__ && (
+            <TouchableOpacity
+              style={[styles.mockButton, { backgroundColor: theme.colors.primary + '20', borderColor: theme.colors.primary }]}
+              onPress={handleMockSignIn}
+              disabled={isGoogleLoading || isAppleLoading}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="bug-outline" size={20} color={theme.colors.primary} />
+              <Text style={[styles.mockButtonText, { color: theme.colors.primary }]}>
+                模拟登录（开发测试）
+              </Text>
+            </TouchableOpacity>
+          )}
 
           {/* 跳过登录 */}
           <TouchableOpacity
@@ -282,6 +316,21 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   skipButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  mockButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 56,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  mockButtonText: {
     fontSize: 16,
     fontWeight: '600',
   },

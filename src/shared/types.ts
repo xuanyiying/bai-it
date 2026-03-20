@@ -1,7 +1,7 @@
-// ========== LLM 配置 ==========
+// ========== AI 配置 ==========
 
-/** llm-adapter 内部使用的扁平格式（从 provider 推导） */
-export interface LLMConfig {
+/** AI-adapter 内部使用的扁平格式（从 provider 推导） */
+export interface AIConfig {
   format: "gemini" | "openai-compatible";
   apiKey: string;
   baseUrl: string;
@@ -18,7 +18,7 @@ export interface ProviderConfig {
 }
 
 /** 多 Provider 存储结构 */
-export interface LLMMultiConfig {
+export interface AIMultiConfig {
   activeProvider: ProviderKey;
   providers: Record<ProviderKey, ProviderConfig>;
 }
@@ -26,7 +26,7 @@ export interface LLMMultiConfig {
 // ========== 插件配置 ==========
 
 export interface BaitConfig {
-  llm: LLMMultiConfig;
+  AI: AIMultiConfig;
   sensitivity: number; // 2-5，细读模式复杂度阈值
   scanThreshold: "short" | "medium" | "long"; // 扫读模式最小词数阈值
   chunkGranularity: "coarse" | "medium" | "fine"; // 拆分颗粒度
@@ -43,7 +43,7 @@ export const DEFAULT_PROVIDERS: Record<ProviderKey, ProviderConfig> = {
 };
 
 export const DEFAULT_CONFIG: BaitConfig = {
-  llm: {
+  AI: {
     activeProvider: "gemini",
     providers: { ...DEFAULT_PROVIDERS },
   },
@@ -55,7 +55,7 @@ export const DEFAULT_CONFIG: BaitConfig = {
 };
 
 /** Provider 元数据（format / baseUrl 是常量，从 provider 名推导） */
-export const PROVIDER_META: Record<ProviderKey, { format: LLMConfig["format"]; baseUrl: string; label: string }> = {
+export const PROVIDER_META: Record<ProviderKey, { format: AIConfig["format"]; baseUrl: string; label: string }> = {
   gemini: { format: "gemini", baseUrl: "", label: "Gemini" },
   chatgpt: { format: "openai-compatible", baseUrl: "https://api.openai.com", label: "ChatGPT" },
   deepseek: { format: "openai-compatible", baseUrl: "https://api.deepseek.com", label: "DeepSeek" },
@@ -63,8 +63,8 @@ export const PROVIDER_META: Record<ProviderKey, { format: LLMConfig["format"]; b
   kimi: { format: "openai-compatible", baseUrl: "https://api.moonshot.cn", label: "Kimi" },
 };
 
-/** 从多 Provider 配置中解析出 LLMConfig（给 llm-adapter 用） */
-export function resolveLLMConfig(multi: LLMMultiConfig): LLMConfig {
+/** 从多 Provider 配置中解析出 AIConfig（给 AI-adapter 用） */
+export function resolveAIConfig(multi: AIMultiConfig): AIConfig {
   const provider = multi.activeProvider;
   const pc = multi.providers[provider];
   const meta = PROVIDER_META[provider];
@@ -77,9 +77,9 @@ export function resolveLLMConfig(multi: LLMMultiConfig): LLMConfig {
 }
 
 /** 旧格式升级到新格式（向后兼容） */
-export function migrateLLMConfig(raw: unknown): LLMMultiConfig {
+export function migrateAIConfig(raw: unknown): AIMultiConfig {
   if (raw && typeof raw === "object" && "activeProvider" in (raw as Record<string, unknown>)) {
-    return raw as LLMMultiConfig;
+    return raw as AIMultiConfig;
   }
   // 旧格式: { format, apiKey, baseUrl, model }
   const old = raw as { format?: string; apiKey?: string; model?: string } | undefined;
@@ -137,7 +137,7 @@ export interface CacheEntry {
 
 export const CACHE_TTL = 7 * 24 * 60 * 60 * 1000; // 7 天
 
-// ========== LLM 完整分析结果 ==========
+// ========== AI 完整分析结果 ==========
 
 export interface FullAnalysisResult {
   chunked: string;
@@ -215,7 +215,7 @@ export interface PatternExampleRecord {
   is_dirty: boolean;
 }
 
-/** learning_records — 阅读记录（只记 LLM 处理过的复杂句子） */
+/** learning_records — 阅读记录（只记 AI 处理过的复杂句子） */
 export interface LearningRecord {
   id: string; // UUID
   sentence: string;
@@ -225,7 +225,7 @@ export interface LearningRecord {
   pattern_key?: PatternKey;
   new_words: { word: string; definition: string }[];
   source_url?: string;
-  llm_provider?: string;
+  AI_provider?: string;
   tokens_used?: number;
   created_at: number;
   updated_at: number;
@@ -244,7 +244,7 @@ export interface SettingsRecord {
 export interface WeeklyReportRecord {
   id: string; // UUID
   week_start: string; // ISO date，如 "2026-02-23"
-  content: string; // LLM 生成的周报文本
+  content: string; // AI 生成的周报文本
   stats: {
     total_sentences: number;
     total_new_words: number;
@@ -289,7 +289,7 @@ export interface PendingSentenceRecord {
   source_url: string;
   source_hostname: string;
   manual: boolean;
-  new_words: string[]; // 只存词，不存释义（释义后续由 LLM 给）
+  new_words: string[]; // 只存词，不存释义（释义后续由 AI 给）
   analyzed: boolean;
   created_at: number;
   updated_at: number;

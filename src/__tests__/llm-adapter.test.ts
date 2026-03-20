@@ -7,26 +7,26 @@ import {
   parseOpenAIResponse,
   parseChunkJson,
   mapToChunkResults,
-} from "../shared/llm-adapter.ts";
-import type { LLMConfig } from "../shared/types.ts";
+} from "../shared/AI-adapter.ts";
+import type { AIConfig } from "../shared/types.ts";
 
-import geminiValid from "../../tests/fixtures/llm-responses/gemini-valid.json";
-import openaiValid from "../../tests/fixtures/llm-responses/openai-valid.json";
-import malformed from "../../tests/fixtures/llm-responses/malformed.json";
+import geminiValid from "../../tests/fixtures/AI-responses/gemini-valid.json";
+import openaiValid from "../../tests/fixtures/AI-responses/openai-valid.json";
+import malformed from "../../tests/fixtures/AI-responses/malformed.json";
 
 const TEST_SENTENCES = [
   "The researchers who had been studying the effects of climate change on coral reefs published their findings in a prestigious journal.",
   "I like cats.",
 ];
 
-const geminiConfig: LLMConfig = {
+const geminiConfig: AIConfig = {
   format: "gemini",
   apiKey: "test-key-123",
   baseUrl: "",
   model: "gemini-2.0-flash",
 };
 
-const openaiConfig: LLMConfig = {
+const openaiConfig: AIConfig = {
   format: "openai-compatible",
   apiKey: "sk-test-key-456",
   baseUrl: "https://api.openai.com",
@@ -211,7 +211,7 @@ describe("parseChunkJson", () => {
 // ========== mapToChunkResults ==========
 
 describe("mapToChunkResults", () => {
-  it("正确映射 LLM items 到 ChunkResult", () => {
+  it("正确映射 AI items 到 ChunkResult", () => {
     const items = parseGeminiResponse(geminiValid);
     const results = mapToChunkResults(TEST_SENTENCES, items);
 
@@ -225,7 +225,7 @@ describe("mapToChunkResults", () => {
     expect(results[1].newWords).toHaveLength(0);
   });
 
-  it("LLM 缺少某个句子的结果时返回默认值", () => {
+  it("AI 缺少某个句子的结果时返回默认值", () => {
     const items = parseChunkJson('[{"index": 0, "original": "Hello", "chunked": "Hello", "is_simple": true, "new_words": []}]');
     const results = mapToChunkResults(["Hello", "World"], items);
 

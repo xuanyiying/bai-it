@@ -65,7 +65,7 @@ export const StatsScreen: React.FC = () => {
       const record = weeklyRecords.find(r => r.date === date);
       return {
         date,
-        studied: !!record && (record.newWords > 0 || record.reviewedWords > 0),
+        studied: !!record && ((record.newWords || 0) > 0 || (record.reviewedWords || 0) > 0),
         newWords: record?.newWords || 0,
         reviewedWords: record?.reviewedWords || 0,
       };
@@ -84,7 +84,7 @@ export const StatsScreen: React.FC = () => {
             const height = maxWords > 0 ? (totalWords / maxWords) * 100 : 0;
 
             return (
-              <View key={`chart-bar-${data.date}-${index}`} style={styles.chartBarContainer}>
+              <View key={`chart-bar-${data.date}-${index}-${Date.now()}`} style={styles.chartBarContainer}>
                 <View style={styles.chartBarWrapper}>
                   <View
                     style={[
@@ -130,11 +130,11 @@ export const StatsScreen: React.FC = () => {
       >
         <View style={styles.streakHeader}>
           <Text style={styles.streakEmoji}>🔥</Text>
-          <Text style={styles.streakValue}>{stats.currentStreak}</Text>
+          <Text style={styles.streakValue}>{stats.currentStreak || 0}</Text>
           <Text style={styles.streakLabel}>{t('stats.days')}</Text>
         </View>
         <Text style={styles.streakText}>{t('stats.streak')}</Text>
-        {stats.longestStreak > stats.currentStreak && (
+        {(stats.longestStreak || 0) > (stats.currentStreak || 0) && (
           <Text style={styles.streakRecord}>
             {t('stats.longestRecord', { count: stats.longestStreak })}
           </Text>
@@ -270,7 +270,7 @@ export const StatsScreen: React.FC = () => {
               </View>
               <Button
                 title={t('stats.startReview')}
-                onPress={() => {}}
+                onPress={() => { }}
                 variant="primary"
                 size="sm"
               />
